@@ -675,6 +675,31 @@ def ladder(row, base):
         yield f'field={fld}', dict(base, field=fld)
 
 
+def psf_from_zogy(img, fwhm=None):
+    """PyZOGY difference image: the PSF model is fitted to the ZOGY difference PSF image itself
+    (lscpsf.py: image = B.zogypsf.fits, catalog zero.cat = one star at the centre, 1 PSF star,
+    FWHM 5 px unless given, no sn2 table, aperture correction 0)."""
+    zimg = Path(str(img).replace('.fits', '.zogypsf.fits'))
+    with fits.open(zimg) as f:
+        data, hdr = f[0].data.astype(float), f[0].header.copy()
+    fwhm = fwhm or 5.
+    a1, a2, a3, a4 = radii(fwhm)
+    datamax = 0.7 * float(hdr.get('SATURATE', np.inf))
+    w = WCS(hdr)
+    x, y = w.wcs_world2pix([0.], [0.], 1)
+    exptime = float(hdr.get('EXPTIME', 1.))
+    ph = phot(data, np.c_[x, y], aps=(a2, a3, a4), annulus=a4, dannulus=10., gain=1., exptime=exptime,
+              datamin=-100., datamax=datamax, cbox=a2)
+    stars = np.c_[ph['xcenter'], ph['ycenter']]
+    bx, by, fitted, chi, npix = fit_gaussian(data, stars, np.asarray(ph['msky']), a1)
+    lut, mid = build_lut(data, fitted, np.asarray(ph['msky']), bx, by, a4, a1, datamax, chi, npix)
+    pm = PSFModel(bx, by, fitted[0, 2], lut, mid, float(ph['mag1'][0]), a4, a1,
+                  stars=[dict(id=1, x=float(stars[0, 0]), y=float(stars[0, 1]), mag=float(ph['mag1'][0]))])
+    scale = float(hdr.get('PIXSCALE') or 1.)
+    return pm, dict(fwhm_input_pix=fwhm, fwhm_input_arcsec=fwhm * scale, fwhm_psf_x_pix=2 * bx,
+                    fwhm_psf_y_pix=2 * by, psfmag=pm.psfmag, apco=0., n_psf_stars=1)
+
+
 def run_one(frame, conn=None, redo=False, auto_fix=True, **kw):
     """psf stage for one frame with the manual's remediation ladder; updates DB like lscpsf.py."""
     t0 = time.time()
@@ -685,6 +710,19 @@ def run_one(frame, conn=None, redo=False, auto_fix=True, **kw):
     if psfout.exists() and not redo:
         qa.status = 'skipped'
         qa.messages.append('psf already calculated')
+        return qa
+    if row['filetype'] == 3 and 'optimal' in frame:
+        try:
+            pm, m = psf_from_zogy(img, kw.get('fwhm'))
+        except Exception as e:
+            db.update(frame, conn, psf='X')
+            return qa.fail(f'zogy psf failed: {e}')
+        pm.write(psfout, {'APCO': 0.})
+        db.update(frame, conn, psf=psfout.name, fwhm=m['fwhm_input_arcsec'], mag=9999, psfmag=9999, apmag=9999,
+                  apercorr=0.)
+        qa.metrics.update(m)
+        qa.outputs = [str(psfout)]
+        qa.seconds = round(time.time() - t0, 2)
         return qa
     if row['quality'] != 127 or row['wcs'] != 0:
         qa.status = 'skipped'
