@@ -98,6 +98,11 @@ def _psfmag(frame, **kw):
     return psfmag.run_one(frame, **kw)
 
 
+def _wcs(frame, **kw):
+    from . import wcs
+    return wcs.run_one(frame, **kw)
+
+
 def _template(frame, **kw):
     from . import template
     return template.run_one(frame, **kw)
@@ -166,7 +171,7 @@ def main(argv=None):
     a.add_argument('--sloan-source', choices=['sdss', 'panstarrs'], default='sdss')
     a.add_argument('-F', '--force', action='store_true')
 
-    for stage in ('cosmic', 'psf', 'psfmag', 'zcat', 'template', 'diff', 'mag', 'getmag'):
+    for stage in ('wcs', 'cosmic', 'psf', 'psfmag', 'zcat', 'template', 'diff', 'mag', 'getmag'):
         a = sub.add_parser(stage)
         a.add_argument('-n', '--name')
         a.add_argument('-e', '--epoch')
@@ -280,6 +285,8 @@ def main(argv=None):
     if not frames:
         print(json.dumps({'stage': args.cmd, 'status': 'skipped', 'n_frames': 0}))
         return qa.EXIT['missing_input']
+    if args.cmd == 'wcs':
+        return _run_stage('wcs', frames, args.jobs, _wcs, force=args.force)
     if args.cmd == 'cosmic':
         return _run_stage('cosmic', frames, args.jobs, _cosmic, force=args.force)
     if args.cmd == 'psf':

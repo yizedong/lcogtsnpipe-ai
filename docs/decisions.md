@@ -1,0 +1,58 @@
+# Where snpipe differs from lcogtsnpipe, and why
+
+Rule followed: reproduce the old pipeline; change behaviour only for (a) things IRAF/MySQL/Docker-specific
+that have no meaning in Python, (b) verified bugs, (c) speed changes that do not change numbers.
+Every item says whether its numerical effect was measured.
+
+## Reproduced exactly (verified bit-identical or to IRAF's printed precision)
+| item | check |
+|---|---|
+| funpack of BANZAI `.fz` (SCI → primary, CAT, BPM) | pixels identical in all extensions (astropy vs cfitsio funpack) |
+| cosmic (astroscrappy call, datamin→saturation replacement, mask dtypes) | 18/18 frames: masks and clean images identical |
+| aperture photometry (IRAF phot: marginal centroid, mean sky with 3σ clipping, apertures 2/3/4 FWHM) | magp2/3/4 identical to 0.000 mag (median and MAD) on 1,230 stars; same recentered positions |
+| PSF star selection (pstselect rules) | same 6 stars, same a2 magnitudes |
+| catalog files and their queries/cuts | same files used by both pipelines |
+| zcat / mag / getmag arithmetic | ported line by line |
+
+## Reproduced with an equivalent algorithm (measured differences)
+| item | old | new | measured effect |
+|---|---|---|---|
+| PSF model | DAOPHOT `psf` gauss + LUT | Gaussian (photutils GaussianPRF) + 2× LUT built with the DAOPHOT recipe, in a photutils ImagePSF | sn2 PSF mags new−old: median ≤0.016, MAD 0.011–0.03 mag (BVgri), 18 frames |
+| PSF photometry | DAOPHOT `nstar` (fitsky=yes) | photutils PSFPhotometry + fitted constant sky | included above; fixed sky would give −0.020 / 0.025 |
+| psfmag background | IRAF imsurfit | astropy Legendre2D, same orders, full cross terms, same sections | — |
+| psfmag sky | apphot `mode` | port of apmode.x | — |
+| alignment for diff | IRAF geomap + gregister (drizzle, fluxconserve) | reproject_exact on the WCS × pixel-area ratio | — (WCS rms ≈0.25″ vs Gaia) |
+| Gaia catalog | ESA archive | ESA archive, VizieR copy of DR3 as fallback (same columns and cuts); ESA archive times out ahead of DR4 | identical source table |
+
+## Speed changes that do not change numbers
+| item | verification |
+|---|---|
+| PyZOGY `interpolate_bad_pixels`: astropy direct 49×49 convolution → separable scipy Gaussian with the same kernel, truncation, NaN and edge handling (SLIDE's idea, but keeping PyZOGY's background subtraction, which SLIDE drops) | max relative difference 1e-14; 60× faster |
+| one phot pass and one PSF-fit pass on all catalog stars (old: phot+nstar twice on overlapping lists) | aperture correction unchanged (−0.0232 both ways on the test frame) |
+| frames in parallel, per-frame scratch directories | — |
+| one DB connection per process, parameterised SQL | — |
+
+## Bugs fixed (verified in the code; numerical effect noted)
+| bug | where | fix | effect on the 2024pxl light curve |
+|---|---|---|---|
+| `getmag --type ph` reports `psfdmag` as the error of the aperture magnitude | myloopdef.run_getmag | uses `dapmag` | errors only |
+| `getmag -o x.csv` writes a space-separated table | myloopdef.run_getmag | real CSV + ECSV | format only |
+| diff rows keep stale photometry columns of the target row | lscdiff.py | all photometry columns reset | none (columns are recomputed) |
+
+## Reported by the code survey but NOT bugs (checked)
+| claim | finding |
+|---|---|
+| zcat "module-global `keep`" | `global` inside an `if` applies to the whole function in Python: works as intended |
+
+## Behaviour kept although questionable (decide later; listed so it is not silent)
+| item | note |
+|---|---|
+| PS1 catalog query drops the bright limit (duplicate dict key) | kept, ASTRA decision `sloan_source` only switches SDSS/PS1 |
+| APASS V transformed with the B colour term (`BBV`) in transform2natural | kept (affects only `zn`, not z1/z2) |
+| pstselect accepts a PSF star with a fainter close companion | kept; caught by the review packet (example: elp1m008-fl05-20180306-0087, star 1) |
+| template = earliest reference frame per filter | kept |
+
+## Added (no old equivalent)
+* remediation ladder for failed PSFs (the manual's advice applied automatically; ASTRA decision `psf_auto_fix`)
+* WCS verification against Gaia for every frame (old: human `checkwcs`)
+* per-frame QA files, review packets, verdict log, ASTRA record
