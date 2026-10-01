@@ -84,6 +84,11 @@ def _psf(frame, **kw):
     return psf.run_one(frame, **kw)
 
 
+def _psfmag(frame, **kw):
+    from . import psfmag
+    return psfmag.run_one(frame, **kw)
+
+
 def _zcat(frame, **kw):
     from . import zcat
     return zcat.run_one(frame, **kw)
@@ -116,7 +121,7 @@ def main(argv=None):
     a.add_argument('--panstarrs', action='store_true')
     a.add_argument('-F', '--force', action='store_true')
 
-    for stage in ('cosmic', 'psf', 'zcat'):
+    for stage in ('cosmic', 'psf', 'psfmag', 'zcat'):
         a = sub.add_parser(stage)
         a.add_argument('-n', '--name')
         a.add_argument('-e', '--epoch')
@@ -136,6 +141,16 @@ def main(argv=None):
             a.add_argument('--field', default='gaia')
             a.add_argument('--model', choices=['daophot', 'epsf'], default='daophot')
             a.add_argument('--no-auto-fix', action='store_true', help='do not run the remediation ladder')
+        if stage == 'psfmag':
+            a.add_argument('-x', '--xord', type=int, default=3)
+            a.add_argument('-y', '--yord', type=int, default=3)
+            a.add_argument('--bkg', type=float, default=4.)
+            a.add_argument('--size', type=float, default=7.)
+            a.add_argument('-c', '--no-recenter', action='store_true')
+            a.add_argument('--datamax', type=float)
+            a.add_argument('--datamin', type=float)
+            a.add_argument('--RA', type=float)
+            a.add_argument('--DEC', type=float)
         if stage == 'zcat':
             a.add_argument('--field', default='')
             a.add_argument('--catalogue', default='')
@@ -185,6 +200,10 @@ def main(argv=None):
         return _run_stage('psf', frames, args.jobs, _psf, redo=args.force, fwhm=args.fwhm, nstars=args.nstars,
                           datamax=args.datamax, datamin=args.datamin, max_apercorr=args.max_apercorr,
                           field=args.field, model=args.model, auto_fix=not args.no_auto_fix)
+    if args.cmd == 'psfmag':
+        return _run_stage('psfmag', frames, args.jobs, _psfmag, redo=args.force, xord=args.xord, yord=args.yord,
+                          bkg=args.bkg, size=args.size, recenter=not args.no_recenter, datamax=args.datamax,
+                          datamin=args.datamin, ra=args.RA, dec=args.DEC)
     if args.cmd == 'zcat':
         # zcat reads the other filters of the night from the DB: run serially (like lscloop)
         return _run_stage('zcat', frames, 1, _zcat, field=args.field, catalogue=args.catalogue,

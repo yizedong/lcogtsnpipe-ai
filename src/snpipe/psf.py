@@ -112,24 +112,107 @@ def iraf_centroid(data, x, y, cbox, datamin, datamax, maxiter=10):
     return x, y, bad
 
 
-def phot(data, xy, aps, annulus, dannulus, gain, exptime, datamin, datamax, cbox):
-    """Recentered aperture photometry of many stars. xy: (N,2) IRAF 1-based. Returns a Table."""
+def gauss_centroid(data, x, y, cbox, datamin, datamax, maxiter=10):
+    """apphot calgorithm='gauss': 1-D Gaussian fits to the box marginals (photutils centroid_1dg)."""
+    from photutils.centroids import centroid_1dg
+    ny, nx = data.shape
+    h = int(cbox / 2)
+    bad = False
+    for _ in range(maxiter):
+        c1, c2 = int(max(1, min(nx, x - h)) + 0.5), int(min(nx, max(1, x + h)) + 0.5)
+        l1, l2 = int(max(1, min(ny, y - h)) + 0.5), int(min(ny, max(1, y + h)) + 0.5)
+        box = data[l1 - 1:l2, c1 - 1:c2]
+        if box.size < 4:
+            return x, y, True
+        bad = bool(box.min() < datamin or box.max() > datamax)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            xc0, yc0 = centroid_1dg(box - box.min())
+        if not (np.isfinite(xc0) and np.isfinite(yc0)):
+            break
+        nxc, nyc = c1 + float(np.clip(xc0, -0.5, box.shape[1] - 0.5)), l1 + float(np.clip(yc0, -0.5, box.shape[0] - 0.5))
+        dx, dy = nxc - x, nyc - y
+        x, y = nxc, nyc
+        if abs(dx) < 1 and abs(dy) < 1:
+            break
+    return x, y, bad
+
+
+def iraf_mode_sky(v, losigma=3., hisigma=3., maxiter=50, medcut_frac=0.025):
+    """apphot salgorithm='mode' (apmode.x): trimmed median, mode = 3 med - 2 mean (or mean if
+    mean < med), iterative +-3 sigma rejection about the mode. Returns (sky, sigma, nsky)."""
+    v = np.sort(np.asarray(v, float)[np.isfinite(v)])
+    n = len(v)
+    if n == 0:
+        return np.nan, np.nan, 0
+
+    def tmed(a):
+        k = len(a)
+        mc = int(round(medcut_frac * k))
+        med = (k + 1) // 2
+        lo = max(1, med - mc)
+        hi = min(k, med + mc) if med % 2 == 1 else min(k, med + mc + 1)
+        return a[lo - 1:hi].mean()
+    dmin, dmax = v[0], v[-1]
+    med = np.clip(tmed(v), dmin, dmax)
+    mean, sig = np.clip(v.mean(), dmin, dmax), v.std()
+    mode = np.clip(mean if mean < med else 3 * med - 2 * mean, dmin, dmax)
+    if sig <= 0:
+        return mode, sig, n
+    lo, hi = 0, n
+    for it in range(maxiter):
+        if it == 0:
+            locut = med - min(med - dmin, dmax - med, losigma * sig)
+            hicut = med + min(med - dmin, dmax - med, hisigma * sig)
+        else:
+            locut, hicut = mode - losigma * sig, mode + hisigma * sig
+        nlo = lo + np.searchsorted(v[lo:hi], locut, side='left')
+        nhi = lo + np.searchsorted(v[lo:hi], hicut, side='right')
+        if nlo == lo and nhi == hi:
+            break
+        lo, hi = nlo, nhi
+        if hi <= lo:
+            return np.nan, np.nan, 0
+        w = v[lo:hi]
+        med = np.clip(tmed(w), dmin, dmax)
+        mean, sig = np.clip(w.mean(), dmin, dmax), w.std()
+        mode = np.clip(mean if mean < med else 3 * med - 2 * mean, dmin, dmax)
+        if sig <= 0:
+            break
+    return mode, sig, hi - lo
+
+
+def phot(data, xy, aps, annulus, dannulus, gain, exptime, datamin, datamax, cbox, salgorithm='mean',
+         calgorithm='centroid'):
+    """Recentered aperture photometry of many stars (IRAF phot). xy: (N,2) IRAF 1-based. Returns a Table.
+    salgorithm 'mean' (psf stage) or 'mode' (daophot default, used by psfmag); calgorithm 'centroid' or
+    'gauss' (1-D Gaussian fits to the marginals, photutils centroid_1dg)."""
     from photutils.aperture import (ApertureStats, CircularAnnulus, CircularAperture,
                                     aperture_photometry)
     ny, nx = data.shape
     xs, ys, cbad = [], [], []
     for x, y in xy:
-        xc, yc, b = iraf_centroid(data, x, y, cbox, datamin, datamax)
+        if calgorithm == 'gauss':
+            xc, yc, b = gauss_centroid(data, x, y, cbox, datamin, datamax)
+        else:
+            xc, yc, b = iraf_centroid(data, x, y, cbox, datamin, datamax)
         xs.append(xc), ys.append(yc), cbad.append(b)
     xs, ys = np.array(xs), np.array(ys)
     pos0 = np.c_[xs - 1, ys - 1]  # photutils is 0-based
     badmask = (data < datamin) | (data > datamax)
     ann = CircularAnnulus(pos0, annulus, annulus + dannulus)
-    st = ApertureStats(data, ann, mask=badmask, sum_method='center',
-                       sigma_clip=SigmaClip(sigma=3., maxiters=50, cenfunc='mean', stdfunc='std'))
-    sky = np.atleast_1d(st.mean).astype(float)
-    sig = np.atleast_1d(st.std).astype(float)
-    nsky = np.atleast_1d(st.sum_aper_area.value).astype(float)
+    if salgorithm == 'mean':
+        st = ApertureStats(data, ann, mask=badmask, sum_method='center',
+                           sigma_clip=SigmaClip(sigma=3., maxiters=50, cenfunc='mean', stdfunc='std'))
+        sky = np.atleast_1d(st.mean).astype(float)
+        sig = np.atleast_1d(st.std).astype(float)
+        nsky = np.atleast_1d(st.sum_aper_area.value).astype(float)
+    else:
+        masks = ann.to_mask(method='center')
+        masks = masks if isinstance(masks, list) else [masks]
+        vals = [m.get_values(data, mask=badmask) for m in masks]
+        res = np.array([iraf_mode_sky(v) for v in vals])
+        sky, sig, nsky = res[:, 0], res[:, 1], res[:, 2]
     out = Table({'id': np.arange(1, len(xs) + 1), 'xcenter': xs, 'ycenter': ys, 'msky': sky,
                  'stdev': sig, 'nsky': nsky, 'cbad': cbad})
     poisoned = np.full(len(xs), len(aps) + 1)  # first aperture index (1-based) containing a bad pixel
@@ -143,7 +226,8 @@ def phot(data, xy, aps, annulus, dannulus, gain, exptime, datamin, datamax, cbox
         # off-image apertures are INDEF (IRAF: X-r < 0.5 or X+r > N+0.5)
         offimg = (xs - r < 0.5) | (xs + r > nx + 0.5) | (ys - r < 0.5) | (ys + r > ny + 0.5)
         # bad pixels within r+0.5 poison this and all larger apertures
-        for j, m in enumerate(CircularAperture(pos0, r + 0.5).to_mask(method='center')):
+        bmasks = CircularAperture(pos0, r + 0.5).to_mask(method='center')
+        for j, m in enumerate(bmasks if isinstance(bmasks, list) else [bmasks]):
             if poisoned[j] <= len(aps):
                 continue
             cut = m.get_values(badf)
