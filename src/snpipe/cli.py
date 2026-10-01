@@ -1,0 +1,196 @@
+"""``snpipe`` command line: one sub-command per stage, lscloop-like frame selection, QA + exit codes.
+
+    snpipe add-target 2024pxl --ra 263.113958 --dec 7.062411 --alias SN2024pxl
+    snpipe ingest --target 2024pxl --start 2024-07-22 --end 2024-11-10 [--local-dir DIR]
+    snpipe catalogs --target 2024pxl
+    snpipe cosmic|psf|zcat ... -n 2024pxl -e 20240722-20241110 [-f landolt|sloan|B V ...] [-j 8]
+"""
+import argparse
+import json
+import logging
+import sys
+import time
+from concurrent.futures import ProcessPoolExecutor
+
+from . import db, qa, sites
+
+log = logging.getLogger('snpipe')
+
+
+def select_frames(args, conn=None):
+    """``myloopdef.get_list`` subset: target, epoch, filters, telescope, filetype, id, bad-stage."""
+    sql = ('SELECT p.* FROM photlco p WHERE p.filetype=? ')
+    params = [args.filetype]
+    if getattr(args, 'name', None):
+        tid = db.target_by_name(args.name, conn)
+        if tid is None:
+            raise SystemExit(qa.EXIT['config'])
+        sql += 'AND p.targetid=? '
+        params.append(tid)
+    if getattr(args, 'epoch', None):
+        e = args.epoch.split('-')
+        sql += 'AND p.dayobs>=? AND p.dayobs<=? '
+        params += [e[0], e[-1]]
+    if getattr(args, 'filter', None):
+        fl = []
+        for f in args.filter:
+            fl += sites.filterst.get(f, [f])
+        sql += f"AND p.filter IN ({','.join('?' * len(fl))}) "
+        params += fl
+    if getattr(args, 'telescope', None):
+        sql += 'AND p.filename LIKE ? '
+        params.append(f'%{args.telescope}%')
+    if getattr(args, 'id', None):
+        sql += 'AND p.filename LIKE ? '
+        params.append(f'%-{args.id}-%')
+    if getattr(args, 'bad', None):
+        cond = {'psf': "p.psf='X'", 'zcat': "p.zcat='X'", 'mag': 'p.mag=9999', 'psfmag': 'p.psfmag=9999',
+                'wcs': 'p.wcs!=0', 'quality': 'p.quality=1'}[args.bad]
+        sql += f'AND {cond} '
+    if getattr(args, 'bad', None) != 'quality':
+        sql += 'AND p.quality=127 '
+    sql += 'ORDER BY p.mjd'
+    return db.query(sql, params, conn)
+
+
+def _run_stage(stage, frames, jobs, fn, **kw):
+    started = time.strftime('%Y-%m-%dT%H:%M:%S')
+    results = []
+    if jobs > 1:
+        with ProcessPoolExecutor(jobs) as ex:
+            futs = [ex.submit(fn, f, **kw) for f in frames]
+            results = [f.result() for f in futs]
+    else:
+        results = [fn(f, **kw) for f in frames]
+    for r, f in zip(results, frames):
+        row = db.get_frame(f)
+        if row:
+            from pathlib import Path
+            qa.write_frame(r, Path(row['filepath']) / f)
+    s = qa.write_summary(stage, results, params=kw, started=started)
+    print(json.dumps({k: s[k] for k in ('stage', 'status', 'counts', 'n_frames', 'wall_seconds')}))
+    return qa.exit_code(s)
+
+
+def _cosmic(frame, force=False):
+    from pathlib import Path
+    from . import cosmic
+    row = db.get_frame(frame)
+    return cosmic.run_one(Path(row['filepath']) / frame, force=force)
+
+
+def _psf(frame, **kw):
+    from . import psf
+    return psf.run_one(frame, **kw)
+
+
+def _zcat(frame, **kw):
+    from . import zcat
+    return zcat.run_one(frame, **kw)
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog='snpipe')
+    p.add_argument('-v', '--verbose', action='store_true')
+    sub = p.add_subparsers(dest='cmd', required=True)
+
+    a = sub.add_parser('add-target')
+    a.add_argument('name')
+    a.add_argument('--ra', type=float, required=True)
+    a.add_argument('--dec', type=float, required=True)
+    a.add_argument('--alias', nargs='*', default=[])
+
+    a = sub.add_parser('ingest')
+    a.add_argument('--target', required=True, help='archive OBJECT name')
+    a.add_argument('--start')
+    a.add_argument('--end')
+    a.add_argument('--filters', nargs='*')
+    a.add_argument('--tels', nargs='*', help='1m0 0m4 2m0')
+    a.add_argument('--frames-json', help='use a saved archive frame list instead of querying')
+    a.add_argument('--local-dir', help='copy files from here instead of downloading')
+    a.add_argument('-j', '--jobs', type=int, default=8)
+
+    a = sub.add_parser('catalogs')
+    a.add_argument('--target', required=True)
+    a.add_argument('--fields', nargs='*', default=['landolt', 'apass', 'sloan', 'gaia'])
+    a.add_argument('--panstarrs', action='store_true')
+    a.add_argument('-F', '--force', action='store_true')
+
+    for stage in ('cosmic', 'psf', 'zcat'):
+        a = sub.add_parser(stage)
+        a.add_argument('-n', '--name')
+        a.add_argument('-e', '--epoch')
+        a.add_argument('-f', '--filter', nargs='+')
+        a.add_argument('-T', '--telescope')
+        a.add_argument('-d', '--id')
+        a.add_argument('-b', '--bad')
+        a.add_argument('--filetype', type=int, default=1)
+        a.add_argument('-F', '--force', action='store_true')
+        a.add_argument('-j', '--jobs', type=int, default=8)
+        if stage == 'psf':
+            a.add_argument('--fwhm', type=float)
+            a.add_argument('--nstars', type=int, default=6)
+            a.add_argument('--datamax', type=float)
+            a.add_argument('--datamin', type=float, default=-100.)
+            a.add_argument('--max-apercorr', type=float, default=0.1)
+            a.add_argument('--field', default='gaia')
+            a.add_argument('--model', choices=['daophot', 'epsf'], default='daophot')
+            a.add_argument('--no-auto-fix', action='store_true', help='do not run the remediation ladder')
+        if stage == 'zcat':
+            a.add_argument('--field', default='')
+            a.add_argument('--catalogue', default='')
+            a.add_argument('--unfix', action='store_true')
+            a.add_argument('--type', choices=['fit', 'ph'], default='fit')
+            a.add_argument('--sigma-clip', type=float, default=2.)
+            a.add_argument('--match-by-site', action='store_true')
+
+    args = p.parse_args(argv)
+    logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING,
+                        format='%(asctime)s %(name)s %(levelname)s %(message)s')
+
+    if args.cmd == 'add-target':
+        from . import ingest
+        tid = ingest.add_target(args.name, args.ra, args.dec)
+        for al in args.alias:
+            if db.target_by_name(al) is None:
+                db.insert('targetnames', {'name': al, 'targetid': tid, 'groupidcode': 32769})
+        print(json.dumps({'targetid': tid}))
+        return 0
+    if args.cmd == 'ingest':
+        from . import ingest
+        if args.frames_json:
+            frames = json.load(open(args.frames_json))
+        else:
+            frames = ingest.query_archive(OBJECT=args.target, start=args.start, end=args.end,
+                                          RLEVEL=91, configuration_type='EXPOSE')
+        frames = [f for f in frames if (not args.filters or f['primary_optical_element'] in args.filters)
+                  and (not args.tels or f['TELID'][:3] in args.tels)]
+        paths, new = ingest.run(frames, args.local_dir, args.jobs)
+        print(json.dumps({'frames': len(frames), 'placed': len(paths), 'new_rows': new}))
+        return qa.EXIT['ok'] if len(paths) == len(frames) else qa.EXIT['missing_input']
+    if args.cmd == 'catalogs':
+        from . import catalogs
+        tid = db.target_by_name(args.target)
+        res = catalogs.run(tid, args.fields, use_panstarrs=args.panstarrs, force=args.force)
+        print(json.dumps(res))
+        return qa.EXIT['external'] if any(v is None for v in res.values()) else 0
+
+    frames = [r['filename'] for r in select_frames(args)]
+    if not frames:
+        print(json.dumps({'stage': args.cmd, 'status': 'skipped', 'n_frames': 0}))
+        return qa.EXIT['missing_input']
+    if args.cmd == 'cosmic':
+        return _run_stage('cosmic', frames, args.jobs, _cosmic, force=args.force)
+    if args.cmd == 'psf':
+        return _run_stage('psf', frames, args.jobs, _psf, redo=args.force, fwhm=args.fwhm, nstars=args.nstars,
+                          datamax=args.datamax, datamin=args.datamin, max_apercorr=args.max_apercorr,
+                          field=args.field, model=args.model, auto_fix=not args.no_auto_fix)
+    if args.cmd == 'zcat':
+        # zcat reads the other filters of the night from the DB: run serially (like lscloop)
+        return _run_stage('zcat', frames, 1, _zcat, field=args.field, catalogue=args.catalogue,
+                          fix=not args.unfix, rejection=args.sigma_clip, mtype=args.type, redo=args.force,
+                          match_by_site=args.match_by_site)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

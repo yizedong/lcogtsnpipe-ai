@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lcogtsnpipe-ai"
+version = "0.1.0"
+description = "IRAF-free, agent-checkable rewrite of the LCOGT supernova photometry pipeline (lcogtsnpipe)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "astropy>=6",
+    "photutils>=2",
+    "sep",
+    "astroscrappy",
+    "astroquery",
+    "reproject",
+    "matplotlib",
+    "requests",
+    "pyyaml",
+    "PyZOGY",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+astra = ["astra-tools"]
+
+[project.scripts]
+snpipe = "snpipe.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+snpipe = ["data/**/*"]

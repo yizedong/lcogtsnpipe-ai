@@ -1,0 +1,19 @@
+# never commit credentials or the private task guideline
+guideline.md
+.lco_env
+*.token
+.env
+
+# data and products
+*.fits
+*.fits.fz
+*.sqlite
+*.db
+runs/
+work/
+
+__pycache__/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
