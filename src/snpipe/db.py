@@ -5,6 +5,7 @@ photpairing). Column names, defaults and sentinel values (9999, 'X', quality 127
 ``supernova.sql`` so a row of the old and the new pipeline can be compared column by column.
 All statements are parameterized and one connection is reused per process.
 """
+import os
 import sqlite3
 import threading
 
@@ -60,13 +61,15 @@ _local = threading.local()
 def connect(path=None):
     """One connection per thread (and per process); rows behave like dicts."""
     path = str(path or config.db_path())
-    conn = getattr(_local, 'conns', {}).get(path)
+    if getattr(_local, 'pid', None) != os.getpid():
+        # forked worker: never reuse the parent's connection (SQLite connections must not cross fork)
+        _local.conns, _local.pid = {}, os.getpid()
+    conn = _local.conns.get(path)
     if conn is None:
         conn = sqlite3.connect(path, timeout=60)
         conn.row_factory = sqlite3.Row
         conn.execute('PRAGMA journal_mode=WAL')
         conn.executescript(SCHEMA)
-        _local.conns = getattr(_local, 'conns', {})
         _local.conns[path] = conn
     return conn
 

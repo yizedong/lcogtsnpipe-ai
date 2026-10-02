@@ -184,7 +184,9 @@ def run(targetid, fields=FIELDS, radius=20., use_panstarrs=False, force=False, c
     t = db.target_info(targetid, conn)
     done = {}
     for field in fields:
-        if t[field + '_cat'] is not None and not (force and t[field + '_cat'] == ''):
+        # '' = earlier query found nothing: retry on --force, or for sloan when switching to Pan-STARRS
+        retry = t[field + '_cat'] == '' and (force or (field == 'sloan' and use_panstarrs))
+        if t[field + '_cat'] is not None and not retry:
             done[field] = t[field + '_cat']
             continue
         source = 'panstarrs' if field == 'sloan' and use_panstarrs else field
