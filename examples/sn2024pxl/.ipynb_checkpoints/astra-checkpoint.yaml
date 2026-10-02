@@ -84,10 +84,9 @@ outputs:
   - psf_model
   - psf_auto_fix
   - max_apercorr
-  - psf_nstars
   recipe:
     command: snpipe psf -n 2024pxl -e 20240722-20241110 -j 8 --model {decisions.psf_model} --auto-fix {decisions.psf_auto_fix}
-      --max-apercorr {decisions.max_apercorr} --nstars {decisions.psf_nstars} && cp qa/psf-latest.json {output}
+      --max-apercorr {decisions.max_apercorr} && cp qa/psf-latest.json {output}
 - id: psfmag_qa
   type: metric
   format: json
@@ -128,11 +127,10 @@ outputs:
   - psf_model
   - psf_auto_fix
   - max_apercorr
-  - psf_nstars
   recipe:
     command: snpipe template -n 2024pxl -e 20180306 && snpipe cosmic -n 2024pxl -e 20180306 --filetype 4 -j 8 &&
       snpipe psf -n 2024pxl -e 20180306 --filetype 4 -j 8 --model {decisions.psf_model} --auto-fix {decisions.psf_auto_fix}
-      --max-apercorr {decisions.max_apercorr} --nstars {decisions.psf_nstars} && cp qa/psf-latest.json {output}
+      --max-apercorr {decisions.max_apercorr} && cp qa/psf-latest.json {output}
 - id: diff_qa
   type: metric
   format: json
@@ -240,19 +238,6 @@ decisions:
         label: Apply the manual's fixes automatically
       'off':
         label: Single attempt, as an unattended old run
-  psf_nstars:
-    label: Number of PSF stars
-    default: n6
-    rationale: Old default 6 (lscpsf -p 6). With a constant PSF over the frame, 6 stars leave a 0.02-0.04 mag bias
-      and 0.07-0.10 mag scatter of PSF vs aperture mags on 1-m frames (both pipelines); the manual suggests 12 as
-      a remedy.
-    options:
-      n6:
-        label: 6 (old default)
-      n12:
-        label: '12'
-      n20:
-        label: '20'
   max_apercorr:
     label: Aperture-correction gate (mag)
     default: apco_0p1

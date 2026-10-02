@@ -53,8 +53,9 @@ def build(target, ra, dec, epoch, tempdate, raw_dir, template_dir, aliases=()):
     for name, sel, ins in (('cosmic_qa', e, ['ingest_qa']), ('template_cosmic_qa', t, ['template_ingest_qa'])):
         o(name, 'metric', 'json', 'L.A.Cosmic (astroscrappy, sigclip 4.5, sigfrac 0.2, objlim 4) per frame',
           ins, f'snpipe cosmic {sel} -j 8 && {_qa("cosmic")}')
-    psf_dec = ['psf_model', 'psf_auto_fix', 'max_apercorr']
-    psf_cmd = '--model {decisions.psf_model} --auto-fix {decisions.psf_auto_fix} --max-apercorr {decisions.max_apercorr}'
+    psf_dec = ['psf_model', 'psf_auto_fix', 'max_apercorr', 'psf_nstars']
+    psf_cmd = ('--model {decisions.psf_model} --auto-fix {decisions.psf_auto_fix} '
+               '--max-apercorr {decisions.max_apercorr} --nstars {decisions.psf_nstars}')
     o('psf_qa', 'metric', 'json', 'PSF model, aperture correction (gate |apco|<=max) and sn2 table per frame',
       ['cosmic_qa', 'catalogs'], f'snpipe psf {e} -j 8 {psf_cmd} && {_qa("psf")}', psf_dec)
     o('psfmag_qa', 'metric', 'json', 'Target PSF + aperture photometry on unsubtracted frames',
@@ -111,6 +112,12 @@ def build(target, ra, dec, epoch, tempdate, raw_dir, template_dir, aliases=()):
                       'more stars or another catalog; without it those frames are lost.',
             options={'ladder': {'label': "Apply the manual's fixes automatically"},
                      'off': {'label': 'Single attempt, as an unattended old run'}}),
+        'psf_nstars': dict(
+            label='Number of PSF stars', default='n6',
+            rationale='Old default 6 (lscpsf -p 6). With a constant PSF over the frame, 6 stars leave a '
+                      '0.02-0.04 mag bias and 0.07-0.10 mag scatter of PSF vs aperture mags on 1-m frames '
+                      '(both pipelines); the manual suggests 12 as a remedy.',
+            options={'n6': {'label': '6 (old default)'}, 'n12': {'label': '12'}, 'n20': {'label': '20'}}),
         'max_apercorr': dict(label='Aperture-correction gate (mag)', default='apco_0p1',
                              rationale='Old pipeline default --max_apercorr 0.1.',
                              options={'apco_0p1': {'label': '0.1 mag'}, 'apco_0p2': {'label': '0.2 mag (looser)'}}),

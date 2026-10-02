@@ -196,7 +196,8 @@ def main(argv=None):
         a.add_argument('-j', '--jobs', type=int, default=8)
         if stage == 'psf':
             a.add_argument('--fwhm', type=float)
-            a.add_argument('--nstars', type=int, default=6)
+            a.add_argument('--nstars', type=lambda v: int(str(v).lstrip('n')), default=6,
+                           help='number of PSF stars (also accepts the ASTRA option ids n6, n12, n20)')
             a.add_argument('--datamax', type=float)
             a.add_argument('--datamin', type=float, default=-100.)
             a.add_argument('--max-apercorr', type=lambda v: float(str(v).replace('apco_', '').replace('p', '.')),
