@@ -14,7 +14,10 @@ import numpy.ma as np
 from numpy import pi  # noqa: F401
 from astropy.table import Table
 
+from astropy.io import fits
+
 from . import db, sites
+from .headers import readkey
 from .qa import FrameQA
 
 
@@ -32,6 +35,21 @@ def image_table(frames, magcol, errcol, conn=None):
             'zcol1', 'z1', 'c1', 'dz1', 'dc1', 'zcol2', 'z2', 'c2', 'dz2', 'dc2', magcol, errcol]
     t = Table({c: [r[c] for r in rows] for c in cols}, masked=True)
     t['shortname'] = [r['filename'][:3] for r in rows]
+    # extinction must use the airmass and site of the image whose stars gave the zero point (the sn2 header
+    # zcat read). For a difference image normalized to the template (PHOTNORM=t) that is the template, not
+    # the science frame whose row the diff copied (old pipeline bug: error k_t*X_t - k_s*X_s, up to 0.15 mag).
+    ext_site, ext_airmass = [], []
+    for r in rows:
+        site, am = r['filename'][:3], r['airmass']
+        sn2 = str(r['filepath']) + '/' + r['filename'].replace('.fits', '.sn2.fits')
+        try:
+            h = fits.getheader(sn2)
+            site, am = h['SITEID'], float(readkey(h, 'airmass'))
+        except (OSError, KeyError, TypeError, ValueError):
+            pass
+        ext_site.append(site)
+        ext_airmass.append(am)
+    t['ext_site'], t['ext_airmass'] = ext_site, ext_airmass
     t['filter'] = [sites.filterst1[f] for f in t['filter']]
     t.rename_column(magcol, 'instmag')
     t.rename_column(errcol, 'dinstmag')
@@ -49,8 +67,8 @@ def run(frames, typemag='fit', match_by_site=False, conn=None):
     color_to_use = sites.chosecolor(t['filter'], True)
     colors_to_calculate = set(sum(color_to_use.values(), []))
     tel_kwd, inst_kwd = ('shortname', 'instrument') if match_by_site else ('telescope', 'instrument')
-    extinction = [sites.extinction[r['shortname']][r['filter']] for r in t]
-    t['instmag_amcorr'] = (t['instmag'].T - extinction * t['airmass']).T
+    extinction = [sites.extinction[r['ext_site']][r['filter']] for r in t]
+    t['instmag_amcorr'] = (t['instmag'].T - extinction * t['ext_airmass']).T
     t = t.group_by(['dayobs', tel_kwd, inst_kwd])
     for filters in colors_to_calculate:
         colors, dcolors = [], []

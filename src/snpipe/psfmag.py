@@ -158,7 +158,8 @@ def run_one(frame, conn=None, redo=False, ra=None, dec=None, **kw):
     merr = float(fit['merr'][0])
     ok = np.isfinite(truemag)
     psfmag = truemag - DM if ok else 9999.
-    psfdmag = max(0., merr) if ok else 0.
+    # an undefined fit error means the fit did not converge: missing (9999), not zero (max(0, nan) gave 0)
+    psfdmag = merr if ok and np.isfinite(merr) and merr > 0 else 9999.
     psfx = float(fit['x'][0]) + x1 - 1 if ok else 9999.
     psfy = float(fit['y'][0]) + y1 - 1 if ok else 9999.
     apmag3 = float(ph['mag3'][0]) if np.isfinite(ph['mag3'][0]) else 9999.
@@ -182,6 +183,11 @@ def run_one(frame, conn=None, redo=False, ra=None, dec=None, **kw):
     else:
         # what a human looks at in checkmag: did the fit stay on the target and converge?
         qa.check('recenter_shift_pix', qa.metrics['recenter_shift_pix'], hi=max(2., f0 / 2), severity='warn')
+        # beyond 2 FWHM the fit is on something else (2024pxl: good fits <= 1.8 px at the 90th percentile;
+        # failed ones 37-10000 px with zero error) -> reject the PSF magnitude, as a person would in checkmag
+        qa.check('recenter_shift_fwhm', qa.metrics['recenter_shift_pix'] / f0, hi=2.)
+        if psfdmag >= 9999:
+            qa.fail('PSF fit error undefined (fit did not converge)')
         qa.check('iteration_spread', float(np.ptp(history[1:])) if len(history) > 2 else 0., hi=0.05, severity='warn')
     qa.outputs = [str(img).replace('.fits', s) for s in ('.og.fits', '.rs.fits', '.sf.fits')]
     qa.seconds = round(time.time() - t0, 2)

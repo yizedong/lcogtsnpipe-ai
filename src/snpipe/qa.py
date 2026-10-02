@@ -8,6 +8,7 @@ and the CLI exits with a code an agent can gate on (see EXIT).
 """
 import hashlib
 import json
+import math
 import platform
 import time
 from dataclasses import asdict, dataclass, field
@@ -45,7 +46,12 @@ class FrameQA:
         """Record a metric and judge it against [lo, hi]."""
         self.metrics[name] = value
         self.thresholds[name] = [lo, hi]
-        bad = value is None or (lo is not None and value < lo) or (hi is not None and value > hi)
+        try:
+            finite = value is not None and math.isfinite(value)
+        except TypeError:
+            finite = value is not None
+        # NaN compares False with every bound: treat a non-finite metric as out of range
+        bad = not finite or (lo is not None and value < lo) or (hi is not None and value > hi)
         if bad:
             (self.fail if severity == 'fail' else self.warn)(f'{name}={value} outside [{lo}, {hi}]')
         return not bad

@@ -39,10 +39,20 @@ def flag_outliers(t, window=1.5, nsig=5., floor=0.1):
     return flags
 
 
-def qa_failed(row):
-    """Names of the stages whose per-frame QA file says 'fail' for this light-curve point."""
+def qa_failed(row, mtype='mag'):
+    """Names of the stages whose per-frame QA file says 'fail' for this light-curve point.
+    The psfmag QA counts when the point comes from the PSF fit (``fit``, or ``mag`` calibrated from psfmag);
+    aperture magnitudes are measured at the aperture centroid and do not depend on the PSF fit."""
     img = Path(row['filepath']) / row['filename']
     files = {'mag': Path(str(img).replace('.fits', '.mag.qa.json'))}
+    psf_based = mtype == 'fit'
+    if mtype == 'mag':
+        try:
+            psf_based = json.loads(files['mag'].read_text()).get('metrics', {}).get('typemag') == 'fit'
+        except (OSError, ValueError):
+            pass
+    if psf_based:
+        files['psfmag'] = Path(str(img).replace('.fits', '.psfmag.qa.json'))
     if '.diff.' in row['filename']:
         stem = row['filename'].split('.optimal')[0]
         tag = ''.join(t for t in ('.cut', '.zp') if t + '.' in row['filename'])
@@ -61,7 +71,7 @@ def run(frames, mtype='mag', combine=1e-10, output=None, conn=None, keep_failed=
     mcol, ecol = COLS[mtype]
     rows = [db.get_frame(f, conn) for f in frames]
     rows = [r for r in rows if r[mcol] is not None and abs(r[mcol]) <= 99]
-    dropped = {r['filename']: qa_failed(r) for r in rows}
+    dropped = {r['filename']: qa_failed(r, mtype) for r in rows}
     dropped = {k: v for k, v in dropped.items() if v}
     if not keep_failed:
         rows = [r for r in rows if r['filename'] not in dropped]
