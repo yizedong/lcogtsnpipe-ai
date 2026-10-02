@@ -852,11 +852,21 @@ def run_one(frame, conn=None, redo=False, auto_fix=True, **kw):
         if catpath is None:
             attempts.append(dict(label=label, status='fail', message='no catalog'))
             continue
+        import signal
+
+        def _timeout(*_):
+            raise TimeoutError(f'attempt exceeded the {budget:.0f} s frame budget')
+        remaining = max(1, int(budget - (time.time() - t0))) if attempts else int(budget)
+        old_handler = signal.signal(signal.SIGALRM, _timeout)
+        signal.alarm(remaining)
         try:
             r, m = ecpsf(img, catpath, fw, o['nstars'], o['datamin'], dmax, o['max_apercorr'], o['model'])
         except Exception as e:
-            attempts.append(dict(label=label, status='fail', message=str(e)))
+            attempts.append(dict(label=label, status='fail', message=f'{type(e).__name__}: {e}'))
             continue
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
         ok = abs(m['apco']) <= o['max_apercorr']
         attempts.append(dict(label=label, status='ok' if ok else 'fail', metrics=m,
                              message='' if ok else f"|apco|={abs(m['apco']):.3f} > {o['max_apercorr']}"))
