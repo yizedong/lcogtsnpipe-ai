@@ -83,7 +83,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **What was wrong:** When the fit did not converge its error was NaN, and max(0, NaN) stored it as 0. A fit that drifted far from the SN only raised a warning, and getmag did not look at psfmag QA.
 - **Why it matters:** A fit 57-10000 px from the SN measures something else; a zero error makes it look like the best point of the night.
 - **Fix:** An undefined error is stored as missing (9999); a fit more than 2 FWHM from the SN position fails QA (good fits: median 0.9 px, 90th percentile 1.8 px); getmag drops points whose PSF fit failed when the magnitude comes from the PSF fit. Aperture magnitudes are measured at the aperture centroid and are not affected.
-- **Effect on SN 2024pxl:** Applied to 2024pxl: the 16 frames re-fitted and all 16 now fail psfmag QA (fits 15-320 px off the SN, 2-26 FWHM); they are no longer in lc_2024pxl_nodiff.csv (515 -> 499 points; the other 499 unchanged). They included two unflagged g points, lsc1m005-fa15-20241003-0063 (19.99 +- 0.005) and -0062 (19.34 +- 0.008), neighbours ~18.86, and one with dmag 8.3e7.
+- **Effect on SN 2024pxl:** Applied to 2024pxl: the 16 frames re-fitted and all 16 now fail psfmag QA (fits 15-318 px off the SN, 2.5-42 FWHM); they are no longer in lc_2024pxl_nodiff.csv (515 -> 499 points; the other 499 unchanged). They included two unflagged g points, lsc1m005-fa15-20241003-0063 (19.99 +- 0.005) and -0062 (19.34 +- 0.008), neighbours ~18.86, and one with dmag 8.3e7.
 
 ### B06 — QA gates let NaN metrics pass
 *qa · snpipe only · 2026-10-02 · fix [`1c2af5c`](https://github.com/yizedong/lcogtsnpipe-ai/commit/1c2af5c) · found by: Codex review (review_1.md #12), verified*
