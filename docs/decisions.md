@@ -19,6 +19,7 @@ Every item says whether its numerical effect was measured.
 | item | old | new | measured effect |
 |---|---|---|---|
 | PSF model | DAOPHOT `psf` gauss + LUT | Gaussian (photutils GaussianPRF) + 2× LUT built with the DAOPHOT recipe, in a photutils ImagePSF | sn2 PSF mags new−old: median ≤0.016, MAD 0.011–0.03 mag (BVgri), 18 frames |
+| grouping for PSF fits | DAOPHOT `group` (link r ≤ fitrad+1, or overlap S/N ≥ critsnratio within psfrad+fitrad+1) + nstar maxgroup 60 | same rule (union-find), groups passed to photutils; groups > 60 not fitted | same results on the test frame; 10–20× faster on bad-seeing 0.4-m frames (plain distance grouping gave groups of 56+) |
 | PSF photometry | DAOPHOT `nstar` (fitsky=yes) | photutils PSFPhotometry + fitted constant sky | included above; fixed sky would give −0.020 / 0.025 |
 | psfmag background | IRAF imsurfit | astropy Legendre2D, same orders, full cross terms, same sections | — |
 | psfmag sky | apphot `mode` | port of apmode.x | — |

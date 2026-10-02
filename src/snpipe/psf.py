@@ -542,7 +542,54 @@ def _with_sky(base):
     return SkyPSF()
 
 
-def psf_photometry(data, model, ph, fitrad, psfrad, gain, ron, datamin, datamax, fitsky=True):
+def daophot_groups(x, y, mag, sky, model, fitrad, psfrad, gain, ron, critsnratio=1.0):
+    """DAOPHOT ``group`` (dpmkgroup.x): friends-of-friends where stars j, c are linked if
+    r <= fitrad+1, or r <= psfrad+fitrad+1 and the brighter star's PSF at distance r-(fitrad+1) gives
+    B^2 >= critsnratio^2 * ((ron/gain)^2 + 0.5*(sky_c+sky_j)/gain). Brightness relative to the PSF
+    (PSFMAG); INDEF magnitudes use the brightest defined one. Returns group ids (1..N)."""
+    from scipy.spatial import cKDTree
+    n = len(x)
+    critsep = psfrad + fitrad + 1.
+    fr1 = fitrad + 1.
+    m = np.where(np.isfinite(mag), mag, np.nanmin(mag) if np.isfinite(mag).any() else model.psfmag)
+    b = 10 ** (0.4 * (model.psfmag - m))
+    base = model.photutils()
+    read_noise = (ron / gain) ** 2
+    parent = np.arange(n)
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    pairs = cKDTree(np.c_[x, y]).query_pairs(critsep, output_type='ndarray')
+    if len(pairs):
+        i, j = pairs[:, 0], pairs[:, 1]
+        dx, dy = x[j] - x[i], y[j] - y[i]
+        r = np.hypot(dx, dy)
+        link = r <= fr1
+        far = ~link
+        if far.any():
+            ratio = (r[far] - fr1) / r[far]
+            bright_i = b[i[far]] >= b[j[far]]
+            # PSF value (counts for a star of PSFMAG) at the shortened offset from the brighter star
+            ox = np.where(bright_i, dx[far] * ratio, -dx[far] * ratio)
+            oy = np.where(bright_i, dy[far] * ratio, -dy[far] * ratio)
+            P = model.volume * base.evaluate(ox, oy, 1., 0., 0.)
+            B = np.where(bright_i, b[i[far]], b[j[far]]) * P
+            thr = critsnratio ** 2 * (read_noise + 0.5 * (sky[i[far]] + sky[j[far]]) / gain)
+            ok = np.isfinite(sky[i[far]]) & np.isfinite(sky[j[far]]) & (B ** 2 >= thr)
+            link[np.flatnonzero(far)[ok]] = True
+        for a, c in zip(i[link], j[link]):
+            ra, rc = find(a), find(c)
+            if ra != rc:
+                parent[ra] = rc
+    roots = np.array([find(k) for k in range(n)])
+    _, gid = np.unique(roots, return_inverse=True)
+    return gid + 1
+
+
+def psf_photometry(data, model, ph, fitrad, psfrad, gain, ron, datamin, datamax, fitsky=True, maxgroup=60):
     """Fit the PSF to the stars of a phot table (recentering, groups, local sky = phot sky,
     plus a fitted sky offset when fitsky, as daopars.fitsky=yes in the old pipeline)."""
     from photutils.psf import PSFPhotometry, SourceGrouper
@@ -562,13 +609,20 @@ def psf_photometry(data, model, ph, fitrad, psfrad, gain, ron, datamin, datamax,
     mask = (data < datamin) | (data > datamax)
     err = np.sqrt(np.maximum(data, 0) / gain + (ron / gain) ** 2)
     size = 2 * int(fitrad) + 1
+    # DAOPHOT grouping; groups larger than maxgroup (60) are not fitted (nstar: "Big_group" -> INDEF)
+    gid = daophot_groups(np.asarray(init['x']), np.asarray(init['y']), np.asarray(ph['mag1'][ok], float),
+                         np.asarray(init['local_bkg'], float), model, fitrad, psfrad, gain, ron)
+    counts = np.bincount(gid)
+    fitme = counts[gid] <= maxgroup
+    init['group_id'] = gid
     pmod = _with_sky(model.photutils()) if fitsky else model.photutils()
-    phot_ = PSFPhotometry(pmod, (size, size),
-                          grouper=SourceGrouper(min_separation=psfrad + fitrad + 1.), fitter_maxiters=200)
+    phot_ = PSFPhotometry(pmod, (size, size), grouper=None, fitter_maxiters=200)
+    idx = np.flatnonzero(ok)[fitme]
+    if not fitme.any():
+        return res
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        out = phot_(data, mask=mask, error=err, init_params=init)
-    idx = np.flatnonzero(ok)
+        out = phot_(data, mask=mask, error=err, init_params=init[fitme])
     res['x'][idx] = np.asarray(out['x_fit']) + 1
     res['y'][idx] = np.asarray(out['y_fit']) + 1
     res['flux'][idx] = out['flux_fit']
