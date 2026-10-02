@@ -94,6 +94,8 @@ def iraf_centroid(data, x, y, cbox, datamin, datamax, maxiter=10):
     ny, nx = data.shape
     h = int(cbox / 2)
     bad = False
+    if x + h < 0.5 or x - h > nx + 0.5 or y + h < 0.5 or y - h > ny + 0.5:
+        return x, y, True  # IRAF OffImage: box entirely off the image -> input position kept
     for _ in range(maxiter):
         c1, c2 = int(max(1, min(nx, x - h)) + 0.5), int(min(nx, max(1, x + h)) + 0.5)
         l1, l2 = int(max(1, min(ny, y - h)) + 0.5), int(min(ny, max(1, y + h)) + 0.5)
@@ -118,6 +120,8 @@ def gauss_centroid(data, x, y, cbox, datamin, datamax, maxiter=10):
     ny, nx = data.shape
     h = int(cbox / 2)
     bad = False
+    if x + h < 0.5 or x - h > nx + 0.5 or y + h < 0.5 or y - h > ny + 0.5:
+        return x, y, True  # IRAF OffImage: box entirely off the image -> input position kept
     for _ in range(maxiter):
         c1, c2 = int(max(1, min(nx, x - h)) + 0.5), int(min(nx, max(1, x + h)) + 0.5)
         l1, l2 = int(max(1, min(ny, y - h)) + 0.5), int(min(ny, max(1, y + h)) + 0.5)
