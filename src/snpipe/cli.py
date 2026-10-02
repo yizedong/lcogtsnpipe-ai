@@ -221,7 +221,7 @@ def main(argv=None):
             a.add_argument('--temptel', default='')
             a.add_argument('--normalize', choices=['t', 'i'], default='t')
             a.add_argument('--unmask', action='store_true')
-            a.add_argument('--register', default='exact', help='exact | bilinear | bicubic')
+            a.add_argument('--register', default='adaptive', help='adaptive | exact | bilinear | bicubic')
         if stage in ('mag', 'getmag'):
             a.add_argument('--type', choices=['fit', 'ph', 'mag'], default=None)
             a.add_argument('--match-by-site', action='store_true')

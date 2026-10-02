@@ -60,19 +60,29 @@ def patch_pyzogy():
     zu.interpolate_bad_pixels = fast_interpolate_bad_pixels
 
 
-def register(template, tmask, thdr, target_hdr, shape, method='exact'):
-    """Template (+mask) onto the target grid; returns (data, mask, footprint)."""
-    from reproject import reproject_exact, reproject_interp
-    wt, wtemp = WCS(target_hdr), WCS(thdr)
-    if method == 'exact':
-        data, foot = reproject_exact((template, wtemp), wt, shape_out=shape, parallel=False)
-    else:
-        data, foot = reproject_interp((template, wtemp), wt, shape_out=shape, order=method)
-    # flux conservation (gregister fluxconserve=yes): multiply by the output/input pixel-area ratio
+def register(template, tmask, thdr, target_hdr, shape, method='adaptive'):
+    """Template (+mask) onto the target grid; returns (data, mask, footprint).
+
+    adaptive (default): reproject_adaptive(conserve_flux=True) — anti-aliased, flux conserving, the closest
+    analogue of IRAF gregister drizzle + fluxconserve; ~40 s for a 4k frame.
+    exact: reproject_exact (area overlap) x pixel-area ratio — very slow on 4k frames.
+    bilinear/bicubic: reproject_interp x pixel-area ratio (the old --no_iraf path, without its flux bug)."""
     from astropy.wcs.utils import proj_plane_pixel_area
-    data = data * proj_plane_pixel_area(wt) / proj_plane_pixel_area(wtemp)
+    from reproject import reproject_adaptive, reproject_exact, reproject_interp
+    wt, wtemp = WCS(target_hdr), WCS(thdr)
+    if method == 'adaptive':
+        data, foot = reproject_adaptive((template, wtemp), wt, shape_out=shape, conserve_flux=True)
+    else:
+        if method == 'exact':
+            data, foot = reproject_exact((template, wtemp), wt, shape_out=shape, parallel=False)
+        else:
+            data, foot = reproject_interp((template, wtemp), wt, shape_out=shape, order=method)
+        data = data * proj_plane_pixel_area(wt) / proj_plane_pixel_area(wtemp)
     m, _ = reproject_interp((tmask.astype(float), wtemp), wt, shape_out=shape, order='bilinear')
-    mask = (np.nan_to_num(m) > 0) | (foot == 0)
+    # As the default (IRAF gregister) path of lscdiff: the registered CR mask only; pixels outside the
+    # template footprint are 0 (boundary='constant') but NOT masked. Masking the footprint (the --no_iraf
+    # path) leaves large masked areas that PyZOGY's 49x49 bad-pixel blur cannot fill (NaN -> gain fit fails).
+    mask = np.nan_to_num(m) > 0
     data = np.where(foot > 0, np.nan_to_num(data), 0.)
     return data, mask, foot
 
@@ -87,7 +97,7 @@ def find_template(row, tempdate, temptel, conn=None):
 
 
 def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unmask=False, force=False,
-            register_method='exact', conn=None):
+            register_method='adaptive', conn=None):
     t0 = time.time()
     row = db.get_frame(frame, conn)
     qa = FrameQA(frame, 'diff')
@@ -127,7 +137,8 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     t_reg = time.time() - t1
     patch_pyzogy()
     from PyZOGY.subtract import run_subtraction
-    with tempfile.TemporaryDirectory(dir=str(img.parent)) as tmp:  # per-frame scratch: parallel-safe
+    scratch = os.getenv('SNPIPE_SCRATCH') or None  # fast local disk for the ~0.4 GB of per-frame scratch FITS
+    with tempfile.TemporaryDirectory(dir=scratch, ignore_cleanup_errors=True) as tmp:  # per-frame, parallel-safe
         tmp = Path(tmp)
         fits.PrimaryHDU(data, hdr).writeto(tmp / '_targ.fits')
         fits.PrimaryHDU(rdata, hdr).writeto(tmp / '_temp.fits')
@@ -136,6 +147,13 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
         fits.PrimaryHDU(PSFModel.read(psf_f).image()).writeto(tmp / '_targpsf.fits')
         fits.PrimaryHDU(PSFModel.read(tpsf_f).image()).writeto(tmp / '_temppsf.fits')
         t1 = time.time()
+        records = []
+
+        class _Grab(logging.Handler):
+            def emit(self, rec):
+                records.append(rec.getMessage())
+        grab = _Grab(level=logging.WARNING)
+        logging.getLogger().addHandler(grab)
         try:
             run_subtraction(str(tmp / '_targ.fits'), str(tmp / '_temp.fits'), str(tmp / '_targpsf.fits'),
                             str(tmp / '_temppsf.fits'), science_mask=str(tmp / '_targmask.fits'),
@@ -143,13 +161,17 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
                             reference_saturation=sat_temp, n_stamps=1, output=str(tmp / '_out.fits'),
                             normalization=normalize, show=False, use_mask_for_gain=not unmask)
         except Exception as e:
-            msg = str(e)
-            if 'Too few stars' in msg and not unmask:
-                qa.messages.append('PyZOGY: too few stars -> retrying with unmask (manual remedy)')
-                return run_one(frame, tempdate, temptel, normalize, True, force, register_method, conn)
+            msg = '; '.join([f'{type(e).__name__}: {e}'] + records[-3:])
+            if not unmask:  # manual: "most of these issues are solved by adding the --unmask flag"
+                q2 = run_one(frame, tempdate, temptel, normalize, True, force, register_method, conn)
+                q2.messages.insert(0, f'first attempt failed ({msg}) -> retried with unmask (manual remedy)')
+                return q2
             return qa.fail(f'PyZOGY failed: {msg}')
+        finally:
+            logging.getLogger().removeHandler(grab)
         t_zogy = time.time() - t1
-        dh = fits.open(tmp / '_out.fits')
+        with fits.open(tmp / '_out.fits') as dh0:
+            dh = fits.HDUList([h.copy() for h in dh0])
         dhdr = dh[0].header
         dhdr['TARGET'], dhdr['TEMPLATE'], dhdr['DIFFIM'] = frame, trow['filename'], out.name
         dhdr['NREGION'], dhdr['MASKVAL'] = 1, 1e-30

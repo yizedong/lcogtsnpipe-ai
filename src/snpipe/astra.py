@@ -128,10 +128,11 @@ def build(target, ra, dec, epoch, tempdate, raw_dir, template_dir, aliases=()):
                                rationale='lscloop default --normalize t: differences in reference units, '
                                          'calibrated with the reference field stars.',
                                options={'t': {'label': 'reference (template)'}, 'i': {'label': 'science image'}}),
-        'diff_register': dict(label='Resampling of the reference onto the science grid', default='exact',
+        'diff_register': dict(label='Resampling of the reference onto the science grid', default='adaptive',
                               rationale='The old default was IRAF gregister drizzle (flux conserving); the '
                                         'manual warns the --no_iraf bilinear path may be worse.',
-                              options={'exact': {'label': 'reproject_exact (area overlap) x pixel-area ratio'},
+                              options={'adaptive': {'label': 'reproject_adaptive, flux conserving (closest to drizzle)'},
+                                       'exact': {'label': 'reproject_exact (area overlap) x pixel-area ratio; slow'},
                                        'bilinear': {'label': 'reproject_interp bilinear x pixel-area ratio'}}),
         'diff_phot_type': dict(label='Photometry on difference images', default='ph',
                                rationale='lscloop uses aperture photometry for difference images by default '
