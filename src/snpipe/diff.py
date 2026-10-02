@@ -253,6 +253,14 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     d = fits.getdata(out).astype(float)
     good = ~(mask | rmask) & np.isfinite(d)
     sig = 1.4826 * np.median(np.abs(d[good] - np.median(d[good])))
+    rg = rdata[~rmask & (foot > 0)]
+    sig_ref = 1.4826 * np.median(np.abs(rg - np.median(rg))) if rg.size else np.nan
+    qa.metrics['noise_ratio_diff_to_ref'] = float(sig / sig_ref) if sig_ref else None
+    # a failed flux-scale fit makes the difference far noisier than its inputs (seen: 20x)
+    if qa.metrics['noise_ratio_diff_to_ref'] is not None:
+        qa.check('noise_ratio_diff_to_ref', qa.metrics['noise_ratio_diff_to_ref'], hi=10., severity='fail')
+        if qa.status == 'ok' and qa.metrics['noise_ratio_diff_to_ref'] > 5:
+            qa.warn('difference noise > 5x the reference sky noise')
     qa.metrics.update(template=trow['filename'], register_seconds=round(t_reg, 1), zogy_seconds=round(t_zogy, 1),
                       diff_median=float(np.median(d[good])), diff_mad_sigma=float(sig),
                       masked_fraction=float(1 - good.mean()), unmask=unmask)

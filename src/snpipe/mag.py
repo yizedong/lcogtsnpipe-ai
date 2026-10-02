@@ -98,5 +98,12 @@ def run(frames, typemag='fit', match_by_site=False, conn=None):
                                                        filter=r['filter'], zcol=zcol[len(qas)], typemag=typemag))
         if r['mag'] >= 9999:
             q.fail('no magnitude (missing zero point, colour or instrumental mag)')
+        elif '.diff.' in r['filename']:
+            # physical gate: the reference has no SN, so the difference cannot be brighter than the total
+            pair = db.query('SELECT namein FROM photpairing WHERE nameout=?', (r['filename'],), conn)
+            src = db.get_frame(pair[0]['namein'], conn) if pair else None
+            if src and src['mag'] is not None and src['mag'] < 99:
+                q.metrics['mag_unsubtracted'] = float(src['mag'])
+                q.check('diff_minus_unsubtracted', float(r['mag'] - src['mag']), lo=-0.2)
         qas.append(q)
     return qas
