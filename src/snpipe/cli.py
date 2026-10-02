@@ -69,20 +69,35 @@ def _safe(fn, frame, stage, **kw):
         return q
 
 
+def _write_qa(r):
+    """Per-frame QA as soon as the frame is done; a 'skipped' result never overwrites earlier QA."""
+    from pathlib import Path
+    row = db.get_frame(r.frame)
+    if not row:
+        return
+    path = Path(row['filepath']) / r.frame
+    out = Path(str(path).replace('.fits', f'.{r.stage}.qa.json'))
+    if r.status == 'skipped' and out.exists():
+        return
+    qa.write_frame(r, path)
+
+
 def _run_stage(stage, frames, jobs, fn, **kw):
+    from concurrent.futures import as_completed
     started = time.strftime('%Y-%m-%dT%H:%M:%S')
     results = []
     if jobs > 1:
         with ProcessPoolExecutor(jobs) as ex:
-            futs = [ex.submit(_safe, fn, f, stage, **kw) for f in frames]
-            results = [f.result() for f in futs]
+            futs = {ex.submit(_safe, fn, f, stage, **kw): f for f in frames}
+            for fut in as_completed(futs):
+                r = fut.result()
+                _write_qa(r)
+                results.append(r)
     else:
-        results = [_safe(fn, f, stage, **kw) for f in frames]
-    for r, f in zip(results, frames):
-        row = db.get_frame(f)
-        if row:
-            from pathlib import Path
-            qa.write_frame(r, Path(row['filepath']) / f)
+        for f in frames:
+            r = _safe(fn, f, stage, **kw)
+            _write_qa(r)
+            results.append(r)
     s = qa.write_summary(stage, results, params=kw, started=started)
     print(json.dumps({k: s[k] for k in ('stage', 'status', 'counts', 'n_frames', 'wall_seconds')}))
     return qa.exit_code(s)
