@@ -15,7 +15,7 @@ hard to set up, and hard to hand to an AI agent. snpipe keeps the science and re
 
 ![Time to reduce the same 99 frames: 8.1 h with the old pipeline, 2.5 h with snpipe](docs/report/visual/speed.png)
 
-*Same 99 frames, same computer: 8.1 h → 2.5 h. Hatched bars are estimated from per-frame times.*
+*Same 99 frames, same computer: 8.1 h → 2.5 h. Vector version: [speed.pdf](docs/report/visual/speed.pdf).*
 
 ## What you get
 

@@ -287,30 +287,58 @@ def fig_timing(out, timing):
 
 
 def fig_speed(out, path):
-    """One picture of the speed-up: stacked time to reduce the same frames, old vs new."""
+    """Proposal-style speed-up figure. (a) time per stage, old vs new, log scale, with the speed-up factor;
+    (b) total time and throughput on the same node. Hatched = new time estimated from per-frame times.
+    Written as PNG (web) and PDF (vector, for documents)."""
     d = json.loads(Path(path).read_text())
     st = d['stages']
-    cols = plt.cm.tab10(np.linspace(0, 1, 10))
-    fig, ax = plt.subplots(figsize=(9, 3.2))
-    for row, key in ((1, 'old'), (0, 'new')):
-        left = 0
-        for k, s in enumerate(st):
-            w = s[key] / 3600
-            hatch = '//' if key == 'new' and s.get('new_estimated') else None
-            ax.barh(row, w, left=left, color=cols[k], edgecolor='white', hatch=hatch,
-                    label=s['stage'] if key == 'old' else None)
-            left += w
-        ax.text(left + 0.1, row, f'{left:.1f} h', va='center', fontsize=10, fontweight='bold')
-    told = sum(s['old'] for s in st) / 3600
-    tnew = sum(s['new'] for s in st) / 3600
-    ax.set_yticks([1, 0], ['old pipeline\n(IRAF, serial)', 'snpipe\n(parallel)'])
-    ax.set_xlabel('hours to reduce the same 99 frames of SN 2024pxl')
-    ax.set_title(f'{told / tnew:.1f}× faster overall; image subtraction dominates both', fontsize=10)
-    ax.set_xlim(0, told * 1.15)
-    ax.legend(fontsize=7, ncol=4, loc='upper center', bbox_to_anchor=(0.5, -0.32), frameon=False)
+    nfr = 99
+    c_old, c_new = '#9a9a9a', '#0b6e99'
+    plt.rcParams.update({'font.size': 9, 'axes.spines.top': False, 'axes.spines.right': False})
+    fig, (a, b) = plt.subplots(1, 2, figsize=(7.2, 3.3), gridspec_kw={'width_ratios': [2.2, 1.15]})
+    names = [s['stage'].replace(' (subtractions)', '\n(on subtractions)').replace('photometry on subtractions',
+             'photometry\n(on subtractions)') for s in st][::-1]
+    y = np.arange(len(st))
+    told = np.array([s['old'] for s in st][::-1]) / 60
+    tnew = np.array([s['new'] for s in st][::-1]) / 60
+    est = [s.get('new_estimated') for s in st][::-1]
+    h = 0.38
+    a.barh(y + h / 2, told, h, color=c_old, label='lcogtsnpipe (IRAF, serial)')
+    for k in range(len(y)):
+        a.barh(y[k] - h / 2, tnew[k], h, color=c_new, hatch='////' if est[k] else None, edgecolor='white',
+               lw=0, label='snpipe (parallel)' if k == 0 else None)
+        f = told[k] / tnew[k]
+        a.text(max(told[k], tnew[k]) * 1.25, y[k], f'{f:.1f}×' if f >= 1 else f'{f:.1f}×*',
+               va='center', fontsize=9, fontweight='bold', color=c_new if f >= 1 else '#b05a00')
+    a.set_xscale('log')
+    a.set_xlim(1, told.max() * 6)
+    a.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f'{v:g}'))
+    a.set_yticks(y, names)
+    a.set_xlabel(f'minutes for {nfr} frames (log scale)')
+    a.legend(loc='lower right', frameon=False, fontsize=8)
+    a.set_title('(a) per stage', loc='left', fontsize=10)
+    a.tick_params(axis='y', length=0)
+    To, Tn = told.sum() / 60, tnew.sum() / 60
+    b.bar([0, 1], [To, Tn], 0.7, color=[c_old, c_new])
+    for x, t in ((0, To), (1, Tn)):
+        b.text(x, t / 2 if x == 0 else t + 0.2, f'{t:.1f} h\n{nfr / t * 24:.0f} frames\nper day', ha='center',
+               va='center' if x == 0 else 'bottom', fontsize=8, color='white' if x == 0 else 'black')
+    yb = To * 1.08
+    b.plot([0, 0, 1, 1], [To + 0.15, yb, yb, Tn + 2.2], color=c_new, lw=1)
+    b.text(0.5, yb + 0.15, f'{To / Tn:.1f}× faster', color=c_new, fontsize=11, fontweight='bold',
+           ha='center', va='bottom')
+    b.set_xticks([0, 1], ['lcogtsnpipe', 'snpipe'])
+    b.set_ylabel('hours, all stages')
+    b.set_ylim(0, To * 1.28)
+    b.set_title('(b) end to end', loc='left', fontsize=10)
+    fig.text(0.01, -0.04, f'Same {nfr} LCO frames of SN 2024pxl, same 8-core / 16 GB node. Hatched: new time '
+             'estimated from per-frame times. *Calibration is slower in snpipe:\nit reads each image for the '
+             'limiting magnitude over a network filesystem.', fontsize=7, color='#444')
     fig.tight_layout()
-    fig.savefig(out / 'speed.png', dpi=110, bbox_inches='tight')
+    for ext in ('png', 'pdf'):
+        fig.savefig(out / f'speed.{ext}', dpi=200, bbox_inches='tight')
     plt.close(fig)
+    plt.rcdefaults()
 
 
 def main():
