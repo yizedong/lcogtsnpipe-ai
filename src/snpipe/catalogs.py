@@ -24,24 +24,6 @@ FIELDS = ('landolt', 'apass', 'sloan', 'gaia')
 _BADCHARS = str.maketrans('', '', ' "*:<>?/|\\')
 
 
-def _sexagesimal(ra_deg, dec_deg):
-    """Format like queryapasscat.deg2HMS (unpadded seconds, as written in the old catalogs)."""
-    out = []
-    for ra, dec in zip(ra_deg, dec_deg):
-        ra0 = int(ra / 15.)
-        ra1 = int((ra / 15. - ra0) * 60)
-        ra2 = ((ra / 15. - ra0) * 60 - ra1) * 60
-        RA = '00'[len(str(ra0)):] + str(ra0) + ':' + '00'[len(str(ra1)):] + str(ra1) + ':' + \
-             '00'[len(str(int(ra2))):] + str(ra2)
-        dec0 = -abs(int(dec)) if str(dec)[0] == '-' else abs(int(dec))
-        dec1 = int((abs(dec) - abs(dec0)) * 60)
-        dec2 = ((abs(dec) - abs(dec0)) * 60 - abs(dec1)) * 60
-        DEC = '00'[len(str(dec0)):] + str(dec0) + ':' + '00'[len(str(dec1)):] + str(dec1) + ':' + \
-              '00'[len(str(int(dec2))):] + str(dec2)
-        out.append((RA, DEC))
-    return out
-
-
 def apass(ra, dec, radius, output):
     """``queryapasscat.readapass2``: APASS DR9 box query, 10.5 < r' < 22, IRAF-astcat style text file."""
     from astroquery.vizier import Vizier
@@ -60,9 +42,10 @@ def apass(ra, dec, radius, output):
     mags = {'B': col('Bmag'), 'V': col('Vmag'), 'g': col("g'mag"), 'r': col("r'mag"), 'i': col("i'mag")}
     errs = {'B': col('e_Bmag'), 'V': col('e_Vmag'), 'g': col("e_g'mag"), 'r': col("e_r'mag"), 'i': col("e_i'mag")}
     keep = (mags['r'] < 22) & (mags['r'] > 10.5)
-    # vizquery returns sexagesimal with ' ' separators that queryapasscat converts with deg2HMS (round trip);
-    # here we start from the same J2000 degrees
-    radec = _sexagesimal(np.asarray(t['_RAJ2000'])[keep], np.asarray(t['_DEJ2000'])[keep])
+    # vizquery returns sexagesimal, which queryapasscat.deg2HMS converts to DEGREES for the file (header: d degrees);
+    # here we start from the same J2000 degrees and write them as degrees
+    radec = [(repr(float(r_)), repr(float(d_))) for r_, d_ in
+             zip(np.asarray(t['_RAJ2000'], float)[keep], np.asarray(t['_DEJ2000'], float)[keep])]
     filters = ['B', 'V', 'g', 'r', 'i']
     header = '# BEGIN CATALOG HEADER\n# nfields 13\n#     ra     1  0 d degrees %10.5f\n' \
              '#     dec    2  0 d degrees %10.5f\n#     id     3  0 c INDEF %15s\n'
