@@ -30,7 +30,7 @@ plt.rcParams.update({'font.size': 8.5, 'axes.titlesize': 9, 'axes.spines.top': F
 def qa_records(new_run, stage, diff):
     out = []
     for f in glob.glob(str(Path(new_run) / 'data' / '*' / '*' / f'*.{stage}.qa.json')):
-        if ('.diff.' in Path(f).name) != diff:
+        if ('.diff.' in Path(f).name) != diff or any(t in Path(f).name for t in ('.zp.', '.cut.')):
             continue
         try:
             out.append(json.load(open(f)))
@@ -375,6 +375,8 @@ def main():
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     old, new = load(a)
+    # option-test products (.zp = --gain zeropoint, .cut = --region cutout) are not part of the reduction
+    new = {k: v for k, v in new.items() if not any(t in k for t in ('.zp.diff', '.cut.diff'))}
     sj = out / 'stages.json'
     res = json.loads(sj.read_text()) if a.only and sj.exists() else {}
     for name, fn in (('cosmic', fig_cosmic), ('wcs', fig_wcs), ('psf', fig_psf), ('psfmag', fig_psfmag),

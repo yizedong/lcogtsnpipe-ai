@@ -35,7 +35,8 @@ def load(args):
     old = {r['filename']: dict(zip(o.colnames, r)) for r in o}
     c = sqlite3.connect(Path(args.new_run) / 'snpipe.sqlite')
     c.row_factory = sqlite3.Row
-    new = {r['filename']: dict(r) for r in c.execute('select * from photlco')}
+    new = {r['filename']: dict(r) for r in c.execute('select * from photlco')
+           if not any(t in r['filename'] for t in ('.zp.diff', '.cut.diff'))}  # option-test products
     return old, new
 
 

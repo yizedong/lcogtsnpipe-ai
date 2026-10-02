@@ -120,7 +120,7 @@ Each was found by comparing with IRAF on real frames, which is why the compariso
 
 ## 6b. Found while making the stage report
 
-* 15 of 161 new difference images fail the noise gate (difference noise > 10× template noise: PyZOGY's flux-scale
+* 19 of 175 new difference images fail the noise gate (difference noise > 10× template noise: PyZOGY's flux-scale
   fit failed). The gate was added after this batch started, so it was recomputed from the products. In the subset,
   the old pipeline also has no magnitude for 7 of the 8 such frames. Most were already caught by the
   "difference brighter than unsubtracted" gate.

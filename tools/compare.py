@@ -44,7 +44,8 @@ def old_rows(csv):
 def new_rows(db):
     c = sqlite3.connect(db)
     c.row_factory = sqlite3.Row
-    return {r['filename']: dict(r) for r in c.execute('select * from photlco')}
+    return {r['filename']: dict(r) for r in c.execute('select * from photlco')
+            if not any(t in r['filename'] for t in ('.zp.diff', '.cut.diff'))}  # option-test products
 
 
 def paired(old, new, col, filetype=None):

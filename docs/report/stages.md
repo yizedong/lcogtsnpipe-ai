@@ -136,7 +136,7 @@ Subtract a pre-explosion template so only the supernova is left.
 | **old** | IRAF geomap + gregister, then PyZOGY |
 | **new** | flux-conserving reprojection, then the same PyZOGY (bad-pixel fill 60× faster) |
 
-> SN aperture mag on differences +0.005 ± 0.027 mag (n=92). The noise check finds 15 of 161 new differences failed (PyZOGY's flux-scale fit); of the 8 such frames in the subset, the old pipeline also has no magnitude for 7. Failed frames are dropped from the light curve; the zero-point flux scale (`--gain zeropoint`) is being tested on them.
+> SN aperture mag on differences +0.005 ± 0.027 mag (n=92). The noise check finds 19 of 175 new differences failed (PyZOGY's flux-scale fit); of the 8 such frames in the subset, the old pipeline also has no magnitude for 7. Failed frames are dropped from the light curve; the zero-point flux scale (`--gain zeropoint`) is being tested on them.
 
 ![Image subtraction](stages/diff.png)
 
@@ -183,7 +183,7 @@ Collect all points into the light curve.
 | **old** | getmag; a person looks at the plot (`--show`) |
 | **new** | getmag + automatic outlier flags; CSV + ECSV with frame names |
 
-> 140 points; 4 flagged for review
+> 152 points; 5 flagged for review
 
 ![Light curve](stages/getmag.png)
 

@@ -60,7 +60,7 @@ whole season. Every figure is made from the products on disk by <code>tools/stag
 <h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>calibration stars kept after clipping</td><td>≥ 5</td><td>warn → review; frame not calibrated if none</td></tr></table></div>
 </section><section id=diff><h2>Image subtraction</h2><p class=what>Subtract a pre-explosion template so only the supernova is left.</p>
 <div class=cmp><div><span class=tag>old</span>IRAF geomap + gregister, then PyZOGY</div><div><span class="tag new">new</span>flux-conserving reprojection, then the same PyZOGY (bad-pixel fill 60× faster)</div></div>
-<p class=agree>SN aperture mag on differences +0.005 ± 0.027 mag (n=92). The noise check finds 15 of 161 new differences failed (PyZOGY's flux-scale fit); of the 8 such frames in the subset, the old pipeline also has no magnitude for 7. Failed frames are dropped from the light curve; the zero-point flux scale (<code>--gain zeropoint</code>) is being tested on them.</p>
+<p class=agree>SN aperture mag on differences +0.005 ± 0.027 mag (n=92). The noise check finds 19 of 175 new differences failed (PyZOGY's flux-scale fit); of the 8 such frames in the subset, the old pipeline also has no magnitude for 7. Failed frames are dropped from the light curve; the zero-point flux scale (<code>--gain zeropoint</code>) is being tested on them.</p>
 <figure><img src="report/stages/diff.png" alt="Image subtraction: old vs new and agent check" loading=lazy>
 <figcaption>Left: old vs new. Right: what the agent checks on every frame (dashed red = gate).</figcaption></figure>
 <h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>noise of difference / noise of template</td><td>≤ 10 (warn > 5)</td><td>fail: the flux-scale fit went wrong (seen: 20×)</td></tr><tr><td>masked fraction</td><td>≤ 50 %</td><td>warn</td></tr></table></div>
@@ -72,7 +72,7 @@ whole season. Every figure is made from the products on disk by <code>tools/stag
 <h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>difference mag − unsubtracted mag</td><td>≥ −0.2 mag</td><td>fail: the SN cannot be brighter after removing the galaxy</td></tr></table></div>
 </section><section id=getmag><h2>Light curve</h2><p class=what>Collect all points into the light curve.</p>
 <div class=cmp><div><span class=tag>old</span>getmag; a person looks at the plot (<code>--show</code>)</div><div><span class="tag new">new</span>getmag + automatic outlier flags; CSV + ECSV with frame names</div></div>
-<p class=agree>140 points; 4 flagged for review</p>
+<p class=agree>152 points; 5 flagged for review</p>
 <figure><img src="report/stages/getmag.png" alt="Light curve: old vs new and agent check" loading=lazy>
 <figcaption>Left: old vs new. Right: what the agent checks on every frame (dashed red = gate).</figcaption></figure>
 <h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>deviation from running median (±1.5 d, same band)</td><td>≤ max(5σ, 5×error, 0.1 mag)</td><td>flagged, kept in the table for review</td></tr></table></div>
