@@ -11,6 +11,7 @@ Every item says whether its numerical effect was measured.
 | cosmic (astroscrappy call, datamin→saturation replacement, mask dtypes) | 18/18 frames: masks and clean images identical |
 | aperture photometry (IRAF phot: marginal centroid, mean sky with 3σ clipping, apertures 2/3/4 FWHM) | magp2/3/4 identical to 0.000 mag (median and MAD) on 1,230 stars; same recentered positions |
 | PSF star selection (pstselect rules) | same 6 stars, same a2 magnitudes |
+| phot sky, salgorithm=mean, incl. IRAF's first-pass cut min(mean−dmin, dmax−mean, 3σ) | frame lsc1m004-fa03-20240818-0142 (annulus reaching off-chip rows): same 6 PSF stars, star 16 a2 −8.260 vs IRAF −8.261, apco −0.078±0.091 vs −0.073±0.095. A plain astropy sigma clip gave −9.55 and apco −4.4 |
 | catalog files and their queries/cuts | same files used by both pipelines |
 | zcat / mag / getmag arithmetic | ported line by line |
 
@@ -49,6 +50,7 @@ Every item says whether its numerical effect was measured.
 |---|---|
 | PS1 catalog query drops the bright limit (duplicate dict key) | kept, ASTRA decision `sloan_source` only switches SDSS/PS1 |
 | APASS V transformed with the B colour term (`BBV`) in transform2natural | kept (affects only `zn`, not z1/z2) |
+| PSF stars are not checked against the BANZAI bad-pixel mask (a star on a flagged strip near the frame edge can be a PSF star; example lsc1m004-fa03-20240818-0142 star 16) | kept; same in IRAF |
 | pstselect accepts a PSF star with a fainter close companion | kept; caught by the review packet (example: elp1m008-fl05-20180306-0087, star 1) |
 | template = earliest reference frame per filter | kept |
 

@@ -138,6 +138,43 @@ def gauss_centroid(data, x, y, cbox, datamin, datamax, maxiter=10):
     return x, y, bad
 
 
+def iraf_mean_sky(v, losigma=3., hisigma=3., maxiter=50):
+    """apphot salgorithm='mean' (apmean.x): mean with iterative 3-sigma rejection where, on the FIRST pass,
+    the cut half-width is limited by the distance from the mean to the data min and max
+    (min(mean-dmin, dmax-mean, 3 sigma)); later passes use +-3 sigma. Population sigma (/N).
+    Returns (sky, sigma, nsky). This first-pass rule rejects e.g. off-chip pixels in an annulus that a
+    plain sigma clip keeps (verified against IRAF on lsc1m004-fa03-20240818-0142, star 16)."""
+    v = np.asarray(v, float)
+    v = v[np.isfinite(v)]
+    n = len(v)
+    if n == 0:
+        return np.nan, np.nan, 0
+    dmin, dmax = v.min(), v.max()
+    keep = np.ones(n, bool)
+    mean, sig = v.mean(), v.std()
+    mean = min(max(mean, dmin), dmax)
+    if sig <= 0:
+        return mean, sig, n
+    for it in range(maxiter):
+        if it == 0:
+            lo = mean - min(mean - dmin, dmax - mean, losigma * sig)
+            hi = mean + min(dmax - mean, mean - dmin, hisigma * sig)
+        else:
+            lo, hi = mean - losigma * sig, mean + hisigma * sig
+        new = keep & ((v < lo) | (v > hi))
+        if not new.any():
+            break
+        keep &= ~new
+        if not keep.any():
+            return np.nan, np.nan, 0
+        w = v[keep]
+        mean, sig = w.mean(), w.std()
+        if sig <= 0:
+            break
+        mean = min(max(mean, dmin), dmax)
+    return mean, sig, int(keep.sum())
+
+
 def iraf_mode_sky(v, losigma=3., hisigma=3., maxiter=50, medcut_frac=0.025):
     """apphot salgorithm='mode' (apmode.x): trimmed median, mode = 3 med - 2 mean (or mean if
     mean < med), iterative +-3 sigma rejection about the mode. Returns (sky, sigma, nsky)."""
@@ -201,18 +238,12 @@ def phot(data, xy, aps, annulus, dannulus, gain, exptime, datamin, datamax, cbox
     pos0 = np.c_[xs - 1, ys - 1]  # photutils is 0-based
     badmask = (data < datamin) | (data > datamax)
     ann = CircularAnnulus(pos0, annulus, annulus + dannulus)
-    if salgorithm == 'mean':
-        st = ApertureStats(data, ann, mask=badmask, sum_method='center',
-                           sigma_clip=SigmaClip(sigma=3., maxiters=50, cenfunc='mean', stdfunc='std'))
-        sky = np.atleast_1d(st.mean).astype(float)
-        sig = np.atleast_1d(st.std).astype(float)
-        nsky = np.atleast_1d(st.sum_aper_area.value).astype(float)
-    else:
-        masks = ann.to_mask(method='center')
-        masks = masks if isinstance(masks, list) else [masks]
-        vals = [m.get_values(data, mask=badmask) for m in masks]
-        res = np.array([iraf_mode_sky(v) for v in vals])
-        sky, sig, nsky = res[:, 0], res[:, 1], res[:, 2]
+    # annulus pixels (centres inside, bad pixels dropped) -> IRAF 'mean' or 'mode' estimator
+    masks = ann.to_mask(method='center')
+    masks = masks if isinstance(masks, list) else [masks]
+    est = iraf_mean_sky if salgorithm == 'mean' else iraf_mode_sky
+    res = np.array([est(m.get_values(data, mask=badmask)) for m in masks], float).reshape(-1, 3)
+    sky, sig, nsky = res[:, 0], res[:, 1], res[:, 2]
     out = Table({'id': np.arange(1, len(xs) + 1), 'xcenter': xs, 'ycenter': ys, 'msky': sky,
                  'stdev': sig, 'nsky': nsky, 'cbad': cbad})
     poisoned = np.full(len(xs), len(aps) + 1)  # first aperture index (1-based) containing a bad pixel
