@@ -97,13 +97,14 @@ def find_template(row, tempdate, temptel, conn=None):
 
 
 def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unmask=False, force=False,
-            register_method='adaptive', region='full', cutout_size=2048, conn=None):
+            register_method='adaptive', region='full', cutout_size=2048, gain='fit', conn=None):
     t0 = time.time()
     row = db.get_frame(frame, conn)
     qa = FrameQA(frame, 'diff')
     img = Path(row['filepath']) / frame
     temptel = temptel or row['instrument'][:2]
-    suffix = f'.optimal.{temptel}{".cut" if region == "cutout" else ""}.diff.fits'.replace('..', '.')
+    tag = ('.cut' if region == 'cutout' else '') + ('.zp' if gain == 'zeropoint' else '')
+    suffix = f'.optimal.{temptel}{tag}.diff.fits'.replace('..', '.')
     out = Path(str(img).replace('.fits', suffix))
     if out.exists() and not force:
         qa.status = 'skipped'
@@ -154,9 +155,22 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     t1 = time.time()
     rdata, rmask, foot = register(tdata, tmask, thdr, hdr, data.shape, register_method)
     t_reg = time.time() - t1
+    # gain_ratio: PyZOGY's iterative flux-scale fit (old default), or from the photometric zero points
+    # (ASTRA decision diff_gain=zeropoint): F_sci/F_ref = (t_sci/t_ref) 10^(0.4 (zn_sci - zn_ref)), zn = zcat's
+    # natural-system zero point (catalogue mag minus raw instrumental mag per second)
+    gain_ratio = np.inf
+    if gain == 'zeropoint':
+        zs, zr = row.get('zn'), trow.get('zn')
+        if zs is None or zr is None or zs >= 9999 or zr >= 9999:
+            qa.messages.append('zero point missing (run zcat on target and template) -> PyZOGY gain fit used')
+        else:
+            gain_ratio = float(readkey(hdr, 'exptime')) / float(readkey(thdr, 'exptime')) * 10 ** (0.4 * (zs - zr))
+            qa.metrics['gain_ratio_zp'] = gain_ratio
     patch_pyzogy()
     from ._pyzogy.subtract import run_subtraction
     scratch = os.getenv('SNPIPE_SCRATCH') or None  # fast local disk for the ~0.4 GB of per-frame scratch FITS
+    if scratch:
+        os.makedirs(scratch, exist_ok=True)  # local scratch can be cleaned by the system between frames
     with tempfile.TemporaryDirectory(dir=scratch, ignore_cleanup_errors=True) as tmp:  # per-frame, parallel-safe
         tmp = Path(tmp)
         fits.PrimaryHDU(data, hdr).writeto(tmp / '_targ.fits')
@@ -178,11 +192,13 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
                             str(tmp / '_temppsf.fits'), science_mask=str(tmp / '_targmask.fits'),
                             reference_mask=str(tmp / '_tempmask.fits'), science_saturation=sat_targ,
                             reference_saturation=sat_temp, n_stamps=1, output=str(tmp / '_out.fits'),
-                            normalization=normalize, show=False, use_mask_for_gain=not unmask)
+                            normalization=normalize, show=False, use_mask_for_gain=not unmask,
+                            gain_ratio=gain_ratio)
         except Exception as e:
             msg = '; '.join([f'{type(e).__name__}: {e}'] + records[-3:])
             if not unmask:  # manual: "most of these issues are solved by adding the --unmask flag"
-                q2 = run_one(frame, tempdate, temptel, normalize, True, force, register_method, conn)
+                q2 = run_one(frame, tempdate, temptel, normalize, True, force, register_method, region, cutout_size,
+                             gain, conn)
                 q2.messages.insert(0, f'first attempt failed ({msg}) -> retried with unmask (manual remedy)')
                 return q2
             return qa.fail(f'PyZOGY failed: {msg}')
@@ -240,7 +256,7 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     qa.metrics.update(template=trow['filename'], register_seconds=round(t_reg, 1), zogy_seconds=round(t_zogy, 1),
                       diff_median=float(np.median(d[good])), diff_mad_sigma=float(sig),
                       masked_fraction=float(1 - good.mean()), unmask=unmask)
-    qa.metrics['region'] = region
+    qa.metrics['region'], qa.metrics['gain'] = region, gain
     qa.check('masked_fraction', qa.metrics['masked_fraction'], hi=0.5, severity='warn')
     qa.outputs = [str(out), str(out).replace('.fits', '.zogypsf.fits')]
     qa.seconds = round(time.time() - t0, 2)

@@ -228,6 +228,8 @@ def main(argv=None):
             a.add_argument('--unmask', action='store_true')
             a.add_argument('--register', default='adaptive', help='adaptive | exact | bilinear | bicubic')
             a.add_argument('--region', choices=['full', 'cutout'], default='full')
+            a.add_argument('--gain', choices=['fit', 'zeropoint'], default='fit',
+                           help='PyZOGY flux ratio: iterative fit (old default) or from zcat zero points')
             a.add_argument('--cutout-size', type=int, default=2048)
         if stage in ('mag', 'getmag'):
             a.add_argument('--type', choices=['fit', 'ph', 'mag'], default=None)
@@ -323,7 +325,8 @@ def main(argv=None):
     if args.cmd == 'diff':
         return _run_stage('diff', frames, args.jobs, _diff, tempdate=args.tempdate, temptel=args.temptel,
                           normalize=args.normalize, unmask=args.unmask, force=args.force,
-                          register_method=args.register, region=args.region, cutout_size=args.cutout_size)
+                          register_method=args.register, region=args.region, cutout_size=args.cutout_size,
+                          gain=args.gain)
     if args.cmd == 'mag':
         from . import mag
         started = time.strftime('%Y-%m-%dT%H:%M:%S')

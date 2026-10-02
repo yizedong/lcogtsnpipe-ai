@@ -73,8 +73,8 @@ def build(target, ra, dec, epoch, tempdate, raw_dir, template_dir, aliases=()):
       ['psf_qa', 'template_qa'],
       f'snpipe diff {e} -j 4 --tempdate {tempdate} --temptel {{decisions.template_camera}} '
       f'--normalize {{decisions.diff_normalize}} --register {{decisions.diff_register}} '
-      f'--region {{decisions.diff_region}} && {_qa("diff")}',
-      ['template_camera', 'diff_normalize', 'diff_register', 'diff_region'])
+      f'--region {{decisions.diff_region}} --gain {{decisions.diff_gain}} && {_qa("diff")}',
+      ['template_camera', 'diff_normalize', 'diff_register', 'diff_region', 'diff_gain'])
     o('diff_phot_qa', 'metric', 'json', 'PSF of the difference images, target photometry on them',
       ['diff_qa'], f'snpipe psf {e} --filetype 3 -j 8 && snpipe psfmag {e} --filetype 3 -j 8 && {_qa("psfmag")}')
     o('diff_zcat_qa', 'metric', 'json', 'Zero points of the difference images (from the reference sn2)',
@@ -141,6 +141,11 @@ def build(target, ra, dec, epoch, tempdate, raw_dir, template_dir, aliases=()):
                                       'uses only the stars of that region.',
                             options={'full': {'label': 'full frame (old pipeline)'},
                                      'cutout': {'label': '2048x2048 px around the target'}}),
+        'diff_gain': dict(label='Flux ratio between science and reference in PyZOGY', default='fit',
+                          rationale='Old default: PyZOGY fits it iteratively from stars in common (5 iterations); '
+                                    'it can instead be set from the zcat zero points (SLIDE fast_mode idea).',
+                          options={'fit': {'label': 'PyZOGY iterative fit (old pipeline)'},
+                                   'zeropoint': {'label': 'from photometric zero points'}}),
         'diff_phot_type': dict(label='Photometry on difference images', default='ph',
                                rationale='lscloop uses aperture photometry for difference images by default '
                                          '(the PyZOGY PSF is neither the science nor the reference PSF).',
