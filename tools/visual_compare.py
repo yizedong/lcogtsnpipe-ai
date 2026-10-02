@@ -332,8 +332,8 @@ def fig_speed(out, path):
     b.set_ylim(0, To * 1.28)
     b.set_title('(b) end to end', loc='left', fontsize=10)
     fig.text(0.01, -0.04, f'Same {nfr} LCO frames of SN 2024pxl, same 8-core / 16 GB node. Hatched: new time '
-             'estimated from per-frame times. *Calibration is slower in snpipe:\nit reads each image for the '
-             'limiting magnitude over a network filesystem.', fontsize=7, color='#444')
+             'estimated from per-frame times. *Calibration was timed while two subtractions shared the node, plus'
+             '\n~27 s Python start-up per command; alone it takes 0.6-0.9 s per frame (old: 0.7 s).', fontsize=7, color='#444')
     fig.tight_layout()
     for ext in ('png', 'pdf'):
         fig.savefig(out / f'speed.{ext}', dpi=200, bbox_inches='tight')

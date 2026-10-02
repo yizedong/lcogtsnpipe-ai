@@ -61,7 +61,7 @@ Figures: `psf_stage.png`, `z1_ft1.png`, `psfmag_ft1.png`, `mag_ft1.png`, `z1_ft3
 | diff (PyZOGY) | 17947 s | 6540 s (2 workers) |
 | psf on differences | 1659 s | 0.3 s/frame |
 | psfmag on differences | 2744 s | 5.3 s/frame |
-| zcat + mag | 0.7 s/frame | 4.4 s/frame (image read for the limiting magnitude over NFS) |
+| zcat + mag | 0.7 s/frame | 4.4 s/frame measured while two PyZOGY subtractions ran on the node; 0.6–0.9 s/frame alone |
 
 Where the speed comes from: no Python+IRAF process per image, no shared scratch files (every stage runs frames in
 parallel), one photometry and one PSF-fit pass instead of two, vectorised DAOPHOT lookup table, and the exact fast
