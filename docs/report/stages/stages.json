@@ -1,0 +1,43 @@
+{
+ "cosmic": {
+  "n": 572,
+  "differ": 0
+ },
+ "wcs": {
+  "n": 18,
+  "rms_med": 0.20531845452028402
+ },
+ "psf": {
+  "n": 528,
+  "recovered": 21,
+  "ladder": [
+   "default",
+   "fwhm x1.25",
+   "fwhm x1.5",
+   "datamax below brightest PSF star",
+   "nstars=12",
+   "field=apass",
+   "field=sloan"
+  ]
+ },
+ "psfmag": {
+  "n": 516,
+  "warn": 25
+ },
+ "zcat": {
+  "n": 642
+ },
+ "diff": {
+  "n": 161,
+  "fail": 15,
+  "warn": 5
+ },
+ "mag": {
+  "n": 152,
+  "fail": 12
+ },
+ "getmag": {
+  "n": 140,
+  "flagged": 4
+ }
+}

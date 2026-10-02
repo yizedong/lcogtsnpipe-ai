@@ -3,6 +3,8 @@
 *Status: 2026-10-02. Numbers marked (subset) use the 99 frames of 2024-07-22…28 that both pipelines reduced;
 the full new light curve and the `diff_gain=zeropoint` test are added in §6–7 when the running reductions finish.*
 
+**Visual, stage by stage (old vs new + how the agent checks each stage): [stages.md](stages.md).**
+
 ## 1. What was done
 
 * **Old pipeline installed without Docker** (README "manual installation", modernised to the Dockerfile's
@@ -115,6 +117,16 @@ Each was found by comparing with IRAF on real frames, which is why the compariso
   0.4 m frames;
 * footprint masking in the difference imaging (the IRAF path masks only cosmic rays) made PyZOGY fail;
 * `reproject_exact` too slow for 4k frames → `reproject_adaptive(conserve_flux=True)`.
+
+## 6b. Found while making the stage report
+
+* 15 of 161 new difference images fail the noise gate (difference noise > 10× template noise: PyZOGY's flux-scale
+  fit failed). The gate was added after this batch started, so it was recomputed from the products. In the subset,
+  the old pipeline also has no magnitude for 7 of the 8 such frames. Most were already caught by the
+  "difference brighter than unsubtracted" gate.
+* `getmag` now drops points whose `mag` or `diff` QA failed (`--keep-failed` keeps them), the automated version of
+  rejecting points in `checkmag`. Subset: 5 points dropped. The 7 failing subset frames were added to the
+  `--gain zeropoint` test.
 
 ## 7. Rejected option
 

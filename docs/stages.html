@@ -1,0 +1,81 @@
+<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>snpipe stage report</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1d1d1f;--mut:#5f6368;--line:#e2e2e0;--acc:#0b6e99;--card:#fff;--old:#8a8a8a;--ok:#2a9d3a;--warn:#c98a00;--fail:#c0392b}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#151617;--fg:#e8e8e6;--mut:#a0a3a7;--line:#2c2e30;--acc:#7fb3dc;--card:#1d1f21}}
+:root[data-theme=dark]{--bg:#151617;--fg:#e8e8e6;--mut:#a0a3a7;--line:#2c2e30;--acc:#7fb3dc;--card:#1d1f21}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1180px;margin:auto;padding:24px 16px 64px}h1{font-size:1.8rem;margin:.2em 0}
+h2{margin-top:2.4em;border-bottom:1px solid var(--line);padding-bottom:.3em}h3{font-size:1rem;margin:1.4em 0 .3em}
+.lead,.what{color:var(--mut)}.toc{display:flex;flex-wrap:wrap;gap:8px;margin:1em 0}.toc a{border:1px solid var(--line);border-radius:999px;padding:3px 12px;text-decoration:none;color:var(--fg);background:var(--card);font-size:.92rem}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}.cmp div{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:.93rem}
+.tag{display:inline-block;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#fff;background:var(--old);border-radius:4px;padding:1px 6px;margin-right:8px}.tag.new{background:var(--acc)}
+.agree{border-left:3px solid var(--acc);padding-left:10px}
+table{border-collapse:collapse;width:100%;font-size:.92rem}td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}th{color:var(--mut);font-weight:600}
+.wrap{overflow-x:auto}figure{margin:1em 0}figure.small img{max-width:720px}img{max-width:100%;border:1px solid var(--line);border-radius:6px;background:#fff}figcaption{color:var(--mut);font-size:.9rem}
+.loop{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:1em 0;font-size:.92rem}.loop span{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 10px}
+.loop i{color:var(--mut);font-style:normal}.ok{border-color:var(--ok)!important}.warn{border-color:var(--warn)!important}.fail{border-color:var(--fail)!important}
+a{color:var(--acc)}code{font-size:.9em}.n{color:var(--mut);font-size:.88rem}
+@media (max-width:640px){.cmp{grid-template-columns:1fr}}
+</style></head><body><main>
+<p><a href="index.html">← summary</a></p>
+<h1>Stage by stage: old vs new, and how an agent checks it</h1>
+<p class=lead>SN 2024pxl, LCO 1 m and 0.4 m images. Both pipelines reduced the same 99 frames of 2024-07-22…28; snpipe also reduced the
+whole season. Every figure is made from the products on disk by <code>tools/stage_report.py</code>.</p>
+<h3>The check loop (replaces a person at <code>checkpsf</code>, <code>checkdiff</code>, <code>getmag --show</code>…)</h3>
+<div class=loop><span>run stage</span><i>→</i><span>gates on every frame</span><i>→</i><span class=ok>ok: continue</span>
+<span class=warn>warn: review packet → agent verdict</span><span class=fail>fail: fix-up ladder → re-check → still failing: review</span></div>
+<p class=n>Each frame gets a <code>&lt;frame&gt;.&lt;stage&gt;.qa.json</code> with metrics, limits and status; each verdict is logged in
+<code>review/verdicts.jsonl</code>. Details: <a href="agents.md">agents.md</a>.</p>
+<nav class=toc><a href="#cosmic">Cosmic rays</a><a href="#wcs">Astrometry (WCS)</a><a href="#psf">PSF model</a><a href="#psfmag">SN photometry</a><a href="#zcat">Zero points</a><a href="#diff">Image subtraction</a><a href="#mag">Calibrated magnitudes</a><a href="#getmag">Light curve</a></nav>
+<section id=cosmic><h2>Cosmic rays</h2><p class=what>Find and mask cosmic-ray hits in every image.</p>
+<div class=cmp><div><span class=tag>old</span>astroscrappy</div><div><span class="tag new">new</span>the same astroscrappy call</div></div>
+<p class=agree><b>bit-identical</b> masks: 0 pixels differ in the frame shown; 18/18 frames identical</p>
+<figure><img src="report/stages/cosmic.png" alt="Cosmic rays: old vs new and agent check" loading=lazy>
+<figcaption>Left: old vs new. Right: what the agent checks on every frame (dashed red = gate).</figcaption></figure>
+<h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>fraction of pixels flagged</td><td>≤ 1 %</td><td>warn → review packet (likely a bad frame, e.g. trails or saturation)</td></tr></table></div>
+</section><section id=wcs><h2>Astrometry (WCS)</h2><p class=what>Check where each image points on the sky.</p>
+<div class=cmp><div><span class=tag>old</span>trusts the BANZAI WCS; a person runs <code>checkwcs</code></div><div><span class="tag new">new</span>measures every frame against Gaia DR3, refits if bad</div></div>
+<p class=agree>new check (none before); median rms 0.21″ on the 18 templates checked</p>
+<figure><img src="report/stages/wcs.png" alt="Astrometry (WCS): old vs new and agent check" loading=lazy>
+<figcaption>Left: old vs new. Right: what the agent checks on every frame (dashed red = gate).</figcaption></figure>
+<h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>matched Gaia stars</td><td>≥ 10</td><td>refit; fail if still too few</td></tr><tr><td>rms of the match</td><td>≤ 2″</td><td>refit, then fail</td></tr><tr><td>median offset</td><td>≤ 1″</td><td>refit, then fail</td></tr></table></div>
+</section><section id=psf><h2>PSF model</h2><p class=what>Measure the shape of stars (the PSF) and the aperture correction.</p>
+<div class=cmp><div><span class=tag>old</span>IRAF daophot <code>phot</code>, <code>psf</code>, <code>group</code>, <code>nstar</code></div><div><span class="tag new">new</span>photutils with the same DAOPHOT recipe (Gaussian + look-up table, grouping, fitted sky)</div></div>
+<p class=agree>aperture correction +0.004 ± 0.009 mag (n=78); aperture photometry identical to IRAF (0.000)</p>
+<figure><img src="report/stages/psf.png" alt="PSF model: old vs new and agent check" loading=lazy>
+<figcaption>Left: old vs new. Right: what the agent checks on every frame (dashed red = gate).</figcaption></figure>
+<h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>|aperture correction|</td><td>≤ 0.1 mag (old limit)</td><td>remediation ladder → recheck → review if still failing</td></tr><tr><td>PSF FWHM vs other frames of the night</td><td>ensemble outlier</td><td>review packet</td></tr></table></div>
+<figure class=small><img src="report/stages/psf_ladder.png" alt="" loading=lazy><figcaption>When the gate fails, the agent reruns the PSF with the fixes listed in the manual (larger FWHM, lower saturation level, more stars, another catalog) and checks again. This frame (7″ seeing) failed every attempt, so it goes to review instead of into the light curve.</figcaption></figure><figure class=small><img src="report/stages/../packets/psf_companion_0087.png" alt="" loading=lazy><figcaption>Review packet: PSF star 1 has a companion 10 px south that leaves a ghost in the model. The old pipeline builds the same PSF; here it is visible to a reviewer.</figcaption></figure></section><section id=psfmag><h2>SN photometry</h2><p class=what>Fit the PSF to the supernova and measure its brightness.</p>
+<div class=cmp><div><span class=tag>old</span>lscsn + daophot <code>allstar</code></div><div><span class="tag new">new</span>photutils PSF fit, IRAF-style sky and background</div></div>
+<p class=agree>SN PSF magnitude +0.010 ± 0.035 mag (n=78)</p>
+<figure><img src="report/stages/psfmag.png" alt="SN photometry: old vs new and agent check" loading=lazy>
+<figcaption>Left: old vs new. Right: what the agent checks on every frame (dashed red = gate).</figcaption></figure>
+<h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>how far the fit moved from the SN position</td><td>≤ max(2 px, FWHM/2)</td><td>warn → review packet</td></tr><tr><td>spread between fit iterations</td><td>≤ 0.05 mag</td><td>warn → review packet</td></tr></table></div>
+<figure class=small><img src="report/stages/../packets/psfmag_0133.png" alt="" loading=lazy><figcaption>Review packet: SN stamp, fit and residual.</figcaption></figure></section><section id=zcat><h2>Zero points</h2><p class=what>Compare field stars with a catalog to get the zero point and colour term.</p>
+<div class=cmp><div><span class=tag>old</span>Python (zcat)</div><div><span class="tag new">new</span>the same code, ported line by line</div></div>
+<p class=agree>zero point +0.000 ± 0.011 mag (n=41)</p>
+<figure><img src="report/stages/zcat.png" alt="Zero points: old vs new and agent check" loading=lazy>
+<figcaption>Left: old vs new. Right: what the agent checks on every frame (dashed red = gate).</figcaption></figure>
+<h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>calibration stars kept after clipping</td><td>≥ 5</td><td>warn → review; frame not calibrated if none</td></tr></table></div>
+</section><section id=diff><h2>Image subtraction</h2><p class=what>Subtract a pre-explosion template so only the supernova is left.</p>
+<div class=cmp><div><span class=tag>old</span>IRAF geomap + gregister, then PyZOGY</div><div><span class="tag new">new</span>flux-conserving reprojection, then the same PyZOGY (bad-pixel fill 60× faster)</div></div>
+<p class=agree>SN aperture mag on differences +0.005 ± 0.027 mag (n=92). The noise check finds 15 of 161 new differences failed (PyZOGY's flux-scale fit); of the 8 such frames in the subset, the old pipeline also has no magnitude for 7. Failed frames are dropped from the light curve; the zero-point flux scale (<code>--gain zeropoint</code>) is being tested on them.</p>
+<figure><img src="report/stages/diff.png" alt="Image subtraction: old vs new and agent check" loading=lazy>
+<figcaption>Left: old vs new. Right: what the agent checks on every frame (dashed red = gate).</figcaption></figure>
+<h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>noise of difference / noise of template</td><td>≤ 10 (warn > 5)</td><td>fail: the flux-scale fit went wrong (seen: 20×)</td></tr><tr><td>masked fraction</td><td>≤ 50 %</td><td>warn</td></tr></table></div>
+<figure class=small><img src="report/stages/../packets/diff_0133.png" alt="" loading=lazy><figcaption>Review packet: target, registered template and difference. Field stars leave small dipoles, a ~0.6 px registration offset (next improvement).</figcaption></figure></section><section id=mag><h2>Calibrated magnitudes</h2><p class=what>Apply zero points and colour terms to get the final magnitude.</p>
+<div class=cmp><div><span class=tag>old</span>calibratemag</div><div><span class="tag new">new</span>ported</div></div>
+<p class=agree>SN calibrated mag on differences +0.002 ± 0.031 mag (n=92)</p>
+<figure><img src="report/stages/mag.png" alt="Calibrated magnitudes: old vs new and agent check" loading=lazy>
+<figcaption>Left: old vs new. Right: what the agent checks on every frame (dashed red = gate).</figcaption></figure>
+<h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>difference mag − unsubtracted mag</td><td>≥ −0.2 mag</td><td>fail: the SN cannot be brighter after removing the galaxy</td></tr></table></div>
+</section><section id=getmag><h2>Light curve</h2><p class=what>Collect all points into the light curve.</p>
+<div class=cmp><div><span class=tag>old</span>getmag; a person looks at the plot (<code>--show</code>)</div><div><span class="tag new">new</span>getmag + automatic outlier flags; CSV + ECSV with frame names</div></div>
+<p class=agree>140 points; 4 flagged for review</p>
+<figure><img src="report/stages/getmag.png" alt="Light curve: old vs new and agent check" loading=lazy>
+<figcaption>Left: old vs new. Right: what the agent checks on every frame (dashed red = gate).</figcaption></figure>
+<h3>How the agent checks it</h3><div class=wrap><table><tr><th>check</th><th>limit</th><th>if it fails</th></tr><tr><td>deviation from running median (±1.5 d, same band)</td><td>≤ max(5σ, 5×error, 0.1 mag)</td><td>flagged, kept in the table for review</td></tr></table></div>
+</section>
+<h2>Credits</h2><p>Built by <b>Claude (Anthropic, Claude Opus 5.5) in Claude Code</b>, directed and reviewed by Yize Dong.</p>
+</main></body></html>

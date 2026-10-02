@@ -6,7 +6,12 @@ magtype; rows with |mag| <= 99, sorted by jd. ``--type mag`` (calibrated), ``fit
 Optional ``combine`` days: inverse-variance mean of points closer than that (same rule as the old code).
 Written as real CSV (the old ``--output x.csv`` wrote a space-separated table) plus an ECSV with the
 frame name of every point, so a reviewer can trace each point back to its packet.
+Frames whose QA failed (the ``mag`` gate, or the ``diff`` gate of the difference image's science frame) are
+left out unless ``keep_failed`` — the automated counterpart of a person rejecting points in ``checkmag``.
 """
+import json
+from pathlib import Path
+
 import numpy as np
 from astropy.table import Table
 
@@ -34,10 +39,31 @@ def flag_outliers(t, window=1.5, nsig=5., floor=0.1):
     return flags
 
 
-def run(frames, mtype='mag', combine=1e-10, output=None, conn=None):
+def qa_failed(row):
+    """Names of the stages whose per-frame QA file says 'fail' for this light-curve point."""
+    img = Path(row['filepath']) / row['filename']
+    files = {'mag': Path(str(img).replace('.fits', '.mag.qa.json'))}
+    if '.diff.' in row['filename']:
+        stem = row['filename'].split('.optimal')[0].split('.zp.')[0]
+        files['diff'] = Path(row['filepath']) / f'{stem}.diff.qa.json'
+    out = []
+    for stage, f in files.items():
+        try:
+            if json.loads(f.read_text()).get('status') == 'fail':
+                out.append(stage)
+        except (OSError, ValueError):
+            pass
+    return out
+
+
+def run(frames, mtype='mag', combine=1e-10, output=None, conn=None, keep_failed=False):
     mcol, ecol = COLS[mtype]
     rows = [db.get_frame(f, conn) for f in frames]
     rows = [r for r in rows if r[mcol] is not None and abs(r[mcol]) <= 99]
+    dropped = {r['filename']: qa_failed(r) for r in rows}
+    dropped = {k: v for k, v in dropped.items() if v}
+    if not keep_failed:
+        rows = [r for r in rows if r['filename'] not in dropped]
     t = Table({'dateobs': [str(r['dateobs']) for r in rows],
                'jd': np.array([r['mjd'] + 2400000.5 for r in rows]),
                'mag': np.array([r[mcol] for r in rows], float), 'dmag': np.array([r[ecol] for r in rows], float),
@@ -66,6 +92,8 @@ def run(frames, mtype='mag', combine=1e-10, output=None, conn=None):
         t = Table(rows=out, names=t.colnames)
     t.sort('jd')
     t['flag'] = flag_outliers(t)
+    t.meta['qa_failed'] = dropped
+    t.meta['qa_failed_kept'] = bool(keep_failed)
     t['jd'].format, t['mag'].format, t['dmag'].format = '%.5f', '%.4f', '%.4f'
     if output:
         t.write(output, format='csv', overwrite=True)

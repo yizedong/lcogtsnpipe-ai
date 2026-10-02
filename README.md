@@ -32,7 +32,8 @@ flowchart LR
 
 ## Details
 
-- [Report: old vs new, with pictures](docs/report/README.md)
+- [Stage-by-stage visual report: old vs new, and how an agent checks each stage](https://yizedong.github.io/lcogtsnpipe-ai/stages.html) ([on GitHub](docs/report/stages.md))
+- [Report: old vs new, numbers and figures](docs/report/README.md)
 - [How to install and run](docs/usage.md)
 - [How an agent runs and checks it](docs/agents.md)
 - [Where it differs from the old code](docs/decisions.md)

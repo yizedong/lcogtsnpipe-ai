@@ -14,6 +14,9 @@ without a TTY). snpipe replaces the human with three layers that an agent (or a 
   (larger FWHM, datamax below the brightest PSF star, 12 stars, other catalog) and records every attempt
   in `metrics.attempts`.
 
+* Light curve: `getmag` leaves out points whose `mag` or `diff` QA failed (listed in the ECSV metadata
+  `qa_failed`; `--keep-failed` keeps them) and flags running-median outliers in the `flag` column.
+
 ## 2. Review packets — what a human used to look at
 ```
 snpipe review psf --ensemble apco fwhm_psf_x_pix   # flags outliers vs frames of the same filter/telescope

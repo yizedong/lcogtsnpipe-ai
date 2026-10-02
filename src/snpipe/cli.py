@@ -251,6 +251,9 @@ def main(argv=None):
             a.add_argument('--match-by-site', action='store_true')
             a.add_argument('-o', '--output')
             a.add_argument('--combine', type=float, default=1e-10)
+            if stage == 'getmag':
+                a.add_argument('--keep-failed', action='store_true',
+                               help='keep points whose mag/diff QA failed (dropped by default)')
         if stage == 'zcat':
             a.add_argument('--field', default='')
             a.add_argument('--catalogue', default='')
@@ -356,10 +359,12 @@ def main(argv=None):
         return qa.exit_code(s)
     if args.cmd == 'getmag':
         from . import getmag
-        t = getmag.run(frames, args.type or 'mag', args.combine, args.output)
+        t = getmag.run(frames, args.type or 'mag', args.combine, args.output, keep_failed=args.keep_failed)
         if not args.output:
             t.pprint(max_lines=-1, max_width=-1)
-        print(json.dumps({'stage': 'getmag', 'n_points': len(t), 'output': args.output}))
+        print(json.dumps({'stage': 'getmag', 'n_points': len(t), 'n_flagged': int(sum(t['flag'])) if len(t) else 0,
+                          'n_qa_failed': len(t.meta['qa_failed']),
+                          'qa_failed_kept': args.keep_failed, 'output': args.output}))
         return 0 if len(t) else qa.EXIT['missing_input']
     if args.cmd == 'zcat':
         # zcat reads the other filters of the night from the DB: run serially (like lscloop)

@@ -158,7 +158,7 @@ def pairs(old, new, col, ft, err=None, lo=None, hi=None):
                 e = float(np.hypot(float(o[err]), float(n[err])))
             except (TypeError, ValueError):
                 e = None
-        out.append((o['filter'], a, b, e))
+        out.append((o['filter'], a, b, e, fn))
     return out
 
 
