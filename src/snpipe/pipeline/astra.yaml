@@ -36,20 +36,20 @@ outputs:
   inputs: [target]
   recipe:
     command: snpipe add-target --target-file {inputs.target} --qa-out {output}
-- id: science_frames
+- id: ingest_science
   type: data
   format: json
   description: Science frames of the DAY-OBS range copied (or downloaded), unpacked and registered.
   inputs: [target, target_registered]
   recipe:
     command: snpipe ingest --target-file {inputs.target} --frames science --qa-out {output}
-- id: reference_frames
+- id: ingest_reference
   type: data
   format: json
   description: Frames of the reference night copied, unpacked and registered (attached to this target whatever their OBJECT).
   inputs: [target, target_registered]
   recipe:
-    command: snpipe ingest --target-file {inputs.target} --frames templates --qa-out {output}
+    command: snpipe ingest --target-file {inputs.target} --frames reference --qa-out {output}
 - id: catalogs
   type: data
   format: json
@@ -63,7 +63,7 @@ outputs:
   type: metric
   format: json
   description: Astrometry of every science frame checked against Gaia; re-fitted when it fails the check.
-  inputs: [target, science_frames, catalogs]
+  inputs: [target, ingest_science, catalogs]
   decisions: [wcs_check]
   when: [wcs_check.gaia]
   recipe:
@@ -72,7 +72,7 @@ outputs:
   type: metric
   format: json
   description: Cosmic rays found and cleaned (astroscrappy, old pipeline settings).
-  inputs: [target, science_frames, wcs_science]
+  inputs: [target, ingest_science, wcs_science]
   recipe:
     command: snpipe cosmic --target-file {inputs.target} --qa-out {output}
 - id: psf_science
@@ -85,14 +85,14 @@ outputs:
     command: >-
       snpipe psf --target-file {inputs.target} --model {decisions.psf_model} --auto-fix {decisions.psf_auto_fix}
       --max-apercorr {decisions.max_apercorr} --nstars {decisions.psf_nstars} --qa-out {output}
-- id: snphot_science
+- id: psfmag_science
   type: metric
   format: json
   description: PSF and aperture photometry of the transient on the science frames (background fitted around it).
   inputs: [target, psf_science]
   recipe:
     command: snpipe psfmag --target-file {inputs.target} --qa-out {output}
-- id: zeropoints_bv
+- id: zcat_science_bv
   type: metric
   format: json
   description: Zero points and colour terms of the B and V frames.
@@ -100,7 +100,7 @@ outputs:
   decisions: [bv_catalog]
   recipe:
     command: snpipe zcat --target-file {inputs.target} -f landolt --field {decisions.bv_catalog} --qa-out {output}
-- id: zeropoints_gri
+- id: zcat_science_gri
   type: metric
   format: json
   description: Zero points and colour terms of the g, r and i frames.
@@ -112,7 +112,7 @@ outputs:
   type: metric
   format: json
   description: Calibrated magnitudes of the transient on the science frames (PSF photometry, colour-corrected).
-  inputs: [target, snphot_science, zeropoints_bv, zeropoints_gri]
+  inputs: [target, psfmag_science, zcat_science_bv, zcat_science_gri]
   recipe:
     command: snpipe mag --target-file {inputs.target} --type fit --qa-out {output}
 - id: lc_unsubtracted
@@ -125,59 +125,68 @@ outputs:
   recipe:
     command: snpipe getmag --target-file {inputs.target} --type mag -o {output}
 # ---------------------------------------------------------------- reference (template) frames
-- id: reference_marked
+- id: cosmic_reference_night
   type: metric
   format: json
-  description: Cosmic rays cleaned on the reference-night frames of the reference camera, then marked as references (filetype 4).
-  inputs: [target, reference_frames]
+  description: >-
+    Cosmic rays cleaned on the reference night's frames of the reference camera, before they become reference
+    images (the reference copy is made from the cleaned frame, as in the 2024pxl validation run).
+  inputs: [target, ingest_reference]
   recipe:
-    command: >-
-      snpipe cosmic --target-file {inputs.target} --frames templates &&
-      snpipe template --target-file {inputs.target} --frames templates --qa-out {output}
-- id: reference_cosmic
+    command: snpipe cosmic --target-file {inputs.target} --frames reference --qa-out {output}
+- id: template_reference
   type: metric
   format: json
-  description: Cosmic rays on the reference images.
-  inputs: [target, reference_marked]
+  description: The reference night's frames marked as reference images (filetype 4, copies of the cleaned frames).
+  inputs: [target, cosmic_reference_night]
   recipe:
-    command: snpipe cosmic --target-file {inputs.target} --frames templates --filetype 4 --qa-out {output}
-- id: reference_psf
+    command: snpipe template --target-file {inputs.target} --frames reference --qa-out {output}
+- id: cosmic_reference
+  type: metric
+  format: json
+  description: >-
+    Cosmic rays on the reference images themselves (the old manual's step; a second pass over the cleaned frame,
+    kept so that the references are identical to the validated runs).
+  inputs: [target, template_reference]
+  recipe:
+    command: snpipe cosmic --target-file {inputs.target} --frames reference --filetype 4 --qa-out {output}
+- id: psf_reference
   type: metric
   format: json
   description: PSF model and star photometry of the reference images (the difference images need both).
-  inputs: [target, reference_cosmic, catalogs]
+  inputs: [target, cosmic_reference, catalogs]
   decisions: [psf_model, psf_auto_fix, max_apercorr, psf_nstars]
   recipe:
     command: >-
-      snpipe psf --target-file {inputs.target} --frames templates --filetype 4 --model {decisions.psf_model}
+      snpipe psf --target-file {inputs.target} --frames reference --filetype 4 --model {decisions.psf_model}
       --auto-fix {decisions.psf_auto_fix} --max-apercorr {decisions.max_apercorr} --nstars {decisions.psf_nstars}
       --qa-out {output}
-- id: reference_zeropoints_bv
+- id: zcat_reference_bv
   type: metric
   format: json
   description: Zero points of the B and V reference images (difference images normalised to the reference use them).
-  inputs: [target, reference_psf, catalogs]
+  inputs: [target, psf_reference, catalogs]
   decisions: [bv_catalog]
   recipe:
     command: >-
-      snpipe zcat --target-file {inputs.target} --frames templates --filetype 4 -f landolt --field {decisions.bv_catalog}
+      snpipe zcat --target-file {inputs.target} --frames reference --filetype 4 -f landolt --field {decisions.bv_catalog}
       --qa-out {output}
-- id: reference_zeropoints_gri
+- id: zcat_reference_gri
   type: metric
   format: json
   description: Zero points of the g, r and i reference images.
-  inputs: [target, reference_psf, catalogs]
+  inputs: [target, psf_reference, catalogs]
   decisions: [gri_catalog]
   recipe:
     command: >-
-      snpipe zcat --target-file {inputs.target} --frames templates --filetype 4 -f sloan --field {decisions.gri_catalog}
+      snpipe zcat --target-file {inputs.target} --frames reference --filetype 4 -f sloan --field {decisions.gri_catalog}
       --qa-out {output}
 # ---------------------------------------------------------------- difference images
-- id: difference_images
+- id: diff_science
   type: metric
   format: json
   description: PyZOGY difference images, science minus reference (earliest reference per filter of the reference camera).
-  inputs: [target, psf_science, reference_psf, reference_zeropoints_bv, reference_zeropoints_gri]
+  inputs: [target, psf_science, psf_reference, zcat_reference_bv, zcat_reference_gri]
   decisions: [diff_normalize, diff_register, diff_region, diff_gain]
   recipe:
     command: >-
@@ -188,10 +197,10 @@ outputs:
   type: metric
   format: json
   description: PSF of every difference image (needed by the transient photometry on it).
-  inputs: [target, difference_images]
+  inputs: [target, diff_science]
   recipe:
     command: snpipe psf --target-file {inputs.target} --filetype 3 --qa-out {output}
-- id: snphot_difference
+- id: psfmag_difference
   type: metric
   format: json
   description: Photometry of the transient on the difference images.
@@ -201,21 +210,21 @@ outputs:
     command: >-
       snpipe psfmag --target-file {inputs.target} --filetype 3 -x {decisions.diff_bkg_order}
       -y {decisions.diff_bkg_order} --qa-out {output}
-- id: zeropoints_difference_bv
+- id: zcat_difference_bv
   type: metric
   format: json
   description: Zero points of the B and V difference images (from the star table of the image they are normalised to).
-  inputs: [target, snphot_difference]
+  inputs: [target, psfmag_difference]
   decisions: [bv_catalog, diff_phot_type]
   recipe:
     command: >-
       snpipe zcat --target-file {inputs.target} --filetype 3 -f landolt --field {decisions.bv_catalog}
       --type {decisions.diff_phot_type} --qa-out {output}
-- id: zeropoints_difference_gri
+- id: zcat_difference_gri
   type: metric
   format: json
   description: Zero points of the g, r and i difference images.
-  inputs: [target, snphot_difference]
+  inputs: [target, psfmag_difference]
   decisions: [gri_catalog, diff_phot_type]
   recipe:
     command: >-
@@ -225,7 +234,7 @@ outputs:
   type: metric
   format: json
   description: Calibrated magnitudes of the transient on the difference images (checked against the unsubtracted ones).
-  inputs: [target, zeropoints_difference_bv, zeropoints_difference_gri, mag_science]
+  inputs: [target, zcat_difference_bv, zcat_difference_gri, mag_science]
   decisions: [diff_phot_type]
   recipe:
     command: snpipe mag --target-file {inputs.target} --filetype 3 --type {decisions.diff_phot_type} --qa-out {output}

@@ -10,7 +10,7 @@
 7. [agents.md](guide/agents.md) — the runbook for an AI agent: run, check, report
 
 ## Reference
-* [../pipeline/astra.yaml](../pipeline/astra.yaml) — the recipe: every step and every decision, with the reasons for the defaults
+* [reference/recipe.md](reference/recipe.md) — the recipe ([pipeline/astra.yaml](../pipeline/astra.yaml)): every step and every decision, with the reasons for the defaults
 * [reference/cli.md](reference/cli.md) — every command and option
 * [reference/compatibility.md](reference/compatibility.md) — where and why snpipe differs from lcogtsnpipe (and what is identical)
 * [reference/bugs.md](reference/bugs.md) — every bug found (fixed and open), why it mattered, its effect ([web](bugs.html))

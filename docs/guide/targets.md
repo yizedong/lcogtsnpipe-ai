@@ -1,6 +1,6 @@
 # Targets: describing an object to reduce
 
-Each object gets a folder:
+Each object gets a folder (anywhere; `targets/` in the repo holds maintained examples):
 
 ```
 targets/sn2025rbs/
@@ -12,10 +12,10 @@ targets/sn2025rbs/
 Create one with
 
 ```bash
-snpipe init-target targets/sn2025xyz --name 2025xyz --alias SN2025xyz "SN 2025xyz" \
+snpipe init-target ~/reductions/sn2025xyz --name 2025xyz --alias SN2025xyz "SN 2025xyz" \
     --ra 123.456789 --dec -12.345678 \
-    --science 20250801-20251231 --templates 20260905 --camera fa \
-    --frames /data/raw/2025xyz            # or: --frames archive
+    --science 20250801-20251231 --reference 20260905 --camera fa \
+    --frames /data/raw/2025xyz            # or: --frames archive; leave out --reference/--camera for no subtraction
 ```
 
 then read and edit `target.yaml`.
@@ -23,15 +23,17 @@ then read and edit `target.yaml`.
 ## target.yaml
 
 ```yaml
+schema_version: 1
 name: 2025rbs                       # name in the pipeline database; every stage selects frames by it
 aliases: [SN2025rbs, SN 2025rbs]    # other names, e.g. the archive OBJECT spellings
 ra: 339.265262                      # degrees: where the transient is (TNS); the photometry is forced here
 dec: 34.418892
+coordinates: TNS                    # optional: where ra/dec come from
 workdir: ${SNPIPE_WORK}/sn2025rbs   # working directory: database, frames, products, results
 science:
   dayobs: 20250715-20260917         # DAY-OBS range of the frames to reduce
   frames: ${SNPIPE_RAW}/2025rbs     # folder with frames.json and the files, or "archive"
-templates:
+reference:                          # optional: without it there is no subtraction
   dayobs: 20260918                  # DAY-OBS of the reference (template) night: one night or a range
   camera: fa                        # camera prefix of the reference frames
   frames: ${SNPIPE_RAW}/2025rbs     # optional: default = science.frames
@@ -44,14 +46,17 @@ resources:
   variable is an error, not an empty string).
 * **DAY-OBS** is the LCO observing-night label in the file name (`cpt1m012-fa06-20240723-0133-e91`), which can
   differ by one from the UTC date of the exposure. Use the file-name date.
-* The science range must not include the reference night.
+* The science range must not include the reference night. Unknown keys, impossible dates and reversed ranges
+  are errors. `templates:` is accepted as the old name of `reference:`.
+* `workdir` and `resources` only say where and how fast to run; changing them never changes results.
 
-### The reference (template) frames
+### The reference frames
 
-Difference imaging subtracts a reference image taken when the transient was not there: before explosion, or long
-after it faded.
+Difference imaging subtracts a reference image (the old pipeline calls it a *template*) taken when the transient
+was not there: before explosion, or long after it faded. Without a `reference` section the run stops after the
+unsubtracted light curve (host light included) and still writes the review queue and the report.
 
-* `templates.dayobs` and `templates.camera` select the reference frames: every frame of that night taken with that
+* `reference.dayobs` and `reference.camera` select the reference frames: every frame of that night taken with that
   camera (`fa` = 1-m Sinistro, `fl` = older 1-m Sinistro, `sq` = 0.4-m QHY, `ep` = MuSCAT). For each filter the
   earliest frame is used for every science frame of that filter, from any telescope.
 * Reference frames often belong to another object in the archive (for 2024pxl they were taken for SN 2017drh in the

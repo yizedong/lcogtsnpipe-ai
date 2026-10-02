@@ -16,7 +16,7 @@ pip install "lcogtsnpipe-ai[astra] @ git+https://github.com/yizedong/lcogtsnpipe
 
 # a folder of BANZAI frames (*-e91.fits.fz) with the archive's frames.json, or --frames archive (LCO_API_KEY)
 snpipe init-target ~/reductions/sn2025xyz --name 2025xyz --alias SN2025xyz --ra 123.456789 --dec -12.345678 \
-    --science 20250801-20251231 --templates 20260905 --camera fa --frames /data/raw/2025xyz
+    --science 20250801-20251231 --reference 20260905 --camera fa --frames /data/raw/2025xyz
 snpipe run ~/reductions/sn2025xyz          # every step, checked; resumes if interrupted
 ```
 
@@ -44,7 +44,7 @@ every decision and its options, is a document that people and agents can read, c
 |---|---|
 | **Use it** | [install](docs/guide/install.md) · [targets](docs/guide/targets.md) · [running](docs/guide/running.md) · [outputs](docs/guide/outputs.md) · [checks](docs/guide/checks.md) · [review](docs/guide/review.md) |
 | **Hand it to an agent** | [runbook](docs/guide/agents.md) |
-| **Look things up** | [commands](docs/reference/cli.md) · [differences from lcogtsnpipe](docs/reference/compatibility.md) · [bugs fixed and open](docs/reference/bugs.md) |
+| **Look things up** | [the recipe](docs/reference/recipe.md) · [commands](docs/reference/cli.md) · [differences from lcogtsnpipe](docs/reference/compatibility.md) · [bugs fixed and open](docs/reference/bugs.md) |
 | **Trust it** | [SN 2024pxl: old vs new, stage by stage](docs/validation/sn2024pxl/README.md) |
 
 ## Contributing

@@ -1,37 +1,42 @@
-"""Target files: the facts about one object that a reduction needs (``targets/<name>/target.yaml``).
+"""Target files: what a reduction of one object needs to know (``targets/<name>/target.yaml``).
 
-A target file holds only facts — where the object is, which nights are science and which are the reference
-(template), where the frames are. Every *choice* about how to reduce them is an ASTRA decision, selected in a
-universe file next to it (``targets/<name>/universes/baseline.yaml``). Example (all keys documented in
-docs/guide/targets.md)::
+A target file holds the object's identity (name, coordinates), the selection of its input frames (science nights,
+reference night) and execution settings (working directory, parallel workers). Every *method* choice is an ASTRA
+decision, selected in a universe file next to it (``universes/baseline.yaml``). Schema (docs/guide/targets.md)::
 
-    name: 2025rbs                       # name in the pipeline database (used by every stage as -n)
+    schema_version: 1
+    name: 2025rbs                       # name in the pipeline database
     aliases: [SN2025rbs, SN 2025rbs]    # other names (archive OBJECT spellings)
-    ra: 339.265262                      # degrees (TNS)
+    ra: 339.265262                      # degrees, where the transient is
     dec: 34.418892
-    workdir: ../../work/sn2025rbs       # optional: pipeline working directory (else $SNPIPE_DIR)
+    coordinates: TNS                    # optional: where ra/dec come from
+    workdir: ${SNPIPE_WORK}/sn2025rbs   # optional: working directory (else $SNPIPE_DIR, else <target>/work)
     science:
-      dayobs: 20250715-20260917         # DAY-OBS range to reduce (YYYYMMDD-YYYYMMDD)
-      frames: /data/rawdata/2025rbs     # folder with frames.json + the files, or "archive"
-    templates:
-      dayobs: 20260918                  # DAY-OBS of the reference night (one night or a range)
-      camera: fa                        # camera prefix of the reference frames (fa, fl, sq, ...)
-      frames: /data/rawdata/2025rbs     # optional, default: same as science
+      dayobs: 20250715-20260917         # DAY-OBS range (YYYYMMDD or YYYYMMDD-YYYYMMDD)
+      frames: ${SNPIPE_RAW}/2025rbs     # folder with frames.json + the files, or "archive"
+    reference:                          # optional: without it there is no subtraction
+      dayobs: 20260918                  # the reference (template) night
+      camera: fa                        # camera prefix of the reference frames
+      frames: ${SNPIPE_RAW}/2025rbs     # optional, default: science.frames
     resources:
       jobs: 8                           # parallel frames for most stages
-      diff_jobs: 2                      # parallel frames for diff (~7 GB of memory each)
+      diff_jobs: 2                      # parallel frames for subtraction (~7 GB memory each)
 
-Relative paths are relative to the target file. DAY-OBS is the LCO observing-night label in the file name
-(``...-20260918-...``), which can differ from the UTC date of the exposure.
+``templates:`` is accepted as the old name of ``reference:``. Relative paths are relative to the file; ``${VAR}``
+is replaced by the environment variable. DAY-OBS is the observing-night label in LCO file names.
 """
 import os
 import re
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import yaml
 
-REQUIRED = ('name', 'ra', 'dec', 'science', 'templates')
-DAYOBS = re.compile(r'^20\d{6}(-20\d{6})?$')
+SCHEMA_VERSION = 1
+KEYS = {'schema_version', 'name', 'aliases', 'ra', 'dec', 'coordinates', 'workdir', 'science', 'reference',
+        'templates', 'resources'}
+PART_KEYS = {'science': {'dayobs', 'frames'}, 'reference': {'dayobs', 'camera', 'frames'}}
+RESOURCE_KEYS = {'jobs', 'diff_jobs'}
 
 
 class TargetError(ValueError):
@@ -48,43 +53,96 @@ def _path(base, value):
     return p if p.is_absolute() else (base / p).resolve()
 
 
+def _dayobs(where, value):
+    """'YYYYMMDD' or 'YYYYMMDD-YYYYMMDD' with real dates in order."""
+    value = str(value or '')
+    parts = value.split('-')
+    try:
+        days = [datetime.strptime(p, '%Y%m%d') for p in parts]
+    except ValueError:
+        days = None
+    if not days or len(parts) > 2 or (len(days) == 2 and days[0] > days[1]):
+        raise TargetError(f'{where}.dayobs must be YYYYMMDD or YYYYMMDD-YYYYMMDD (first <= last), got {value!r}')
+    return value
+
+
+def _unknown(where, d, allowed):
+    extra = set(d) - allowed
+    if extra:
+        raise TargetError(f'{where}: unknown keys {sorted(extra)} (allowed: {sorted(allowed)})')
+
+
 def load(path):
-    """Read and validate a target file (or a target directory containing ``target.yaml``)."""
+    """Read and validate a target file (or a folder containing ``target.yaml``)."""
     path = Path(path)
     if path.is_dir():
         path = path / 'target.yaml'
     if not path.exists():
         raise TargetError(f'no target file {path}')
     t = yaml.safe_load(path.read_text()) or {}
-    missing = [k for k in REQUIRED if k not in t]
-    if missing:
-        raise TargetError(f'{path}: missing {missing}')
+    _unknown(path, t, KEYS)
+    if int(t.get('schema_version', SCHEMA_VERSION)) != SCHEMA_VERSION:
+        raise TargetError(f'{path}: schema_version {t["schema_version"]} not supported (this snpipe: {SCHEMA_VERSION})')
+    for k in ('name', 'ra', 'dec', 'science'):
+        if k not in t:
+            raise TargetError(f'{path}: missing {k}')
+    if 'templates' in t:
+        if t.get('reference') is not None:
+            raise TargetError(f'{path}: give reference or templates (old name), not both')
+        t['reference'] = t.pop('templates')
     t['name'] = str(t['name'])
     t['aliases'] = [str(a) for a in t.get('aliases') or []]
-    if not (0 <= float(t['ra']) < 360 and -90 <= float(t['dec']) <= 90):
+    try:
+        ra, dec = float(t['ra']), float(t['dec'])
+    except (TypeError, ValueError):
+        raise TargetError(f'{path}: ra/dec must be numbers (degrees)')
+    if not (0 <= ra < 360 and -90 <= dec <= 90):
         raise TargetError(f'{path}: ra/dec out of range')
-    for part in ('science', 'templates'):
-        d = t[part] = dict(t[part] or {})
-        d['dayobs'] = str(d.get('dayobs', ''))
-        if not DAYOBS.match(d['dayobs']):
-            raise TargetError(f'{path}: {part}.dayobs must be YYYYMMDD or YYYYMMDD-YYYYMMDD, got {d["dayobs"]!r}')
-    if not t['templates'].get('camera'):
-        raise TargetError(f'{path}: templates.camera (e.g. fa, fl, sq) is required')
     base = path.parent.resolve()
-    t['science']['frames'] = _path(base, t['science'].get('frames', 'archive'))
-    t['templates']['frames'] = _path(base, t['templates'].get('frames')) or t['science']['frames']
+    sci = dict(t['science'] or {})
+    _unknown(f'{path}: science', sci, PART_KEYS['science'])
+    sci['dayobs'] = _dayobs(f'{path}: science', sci.get('dayobs'))
+    sci['frames'] = _path(base, sci.get('frames', 'archive'))
+    t['science'] = sci
+    ref = t.get('reference')
+    if ref:
+        ref = dict(ref)
+        _unknown(f'{path}: reference', ref, PART_KEYS['reference'])
+        ref['dayobs'] = _dayobs(f'{path}: reference', ref.get('dayobs'))
+        if not ref.get('camera'):
+            raise TargetError(f'{path}: reference.camera (e.g. fa, fl, sq) is required')
+        ref['frames'] = _path(base, ref.get('frames')) or sci['frames']
+        lo, _, hi = sci['dayobs'].partition('-')
+        rlo, _, rhi = ref['dayobs'].partition('-')
+        if not ((rhi or rlo) < lo or rlo > (hi or lo)):
+            raise TargetError(f'{path}: the reference nights overlap the science nights')
+    t['reference'] = ref or None
+    res = dict(t.get('resources') or {})
+    _unknown(f'{path}: resources', res, RESOURCE_KEYS)
+    res = {'jobs': 8, 'diff_jobs': 2, **res}
+    if not all(isinstance(v, int) and v > 0 for v in res.values()):
+        raise TargetError(f'{path}: resources must be positive integers')
+    t['resources'] = res
     t['workdir'] = _path(base, t.get('workdir'))
-    t['resources'] = {'jobs': 8, 'diff_jobs': 2, **(t.get('resources') or {})}
     t['file'] = path.resolve()
     t['dir'] = base
     return t
 
 
+def facts(t):
+    """What determines the results (for resume signatures): everything except workdir and resources."""
+    plain = lambda v: ({k: plain(x) for k, x in v.items()} if isinstance(v, dict) else
+                       [plain(x) for x in v] if isinstance(v, list) else str(v) if isinstance(v, Path) else v)
+    keep = ('name', 'aliases', 'ra', 'dec', 'science', 'reference')
+    return yaml.safe_dump(plain({k: v for k, v in t.items() if k in keep}), sort_keys=True, default_flow_style=True)
+
+
 def activate(t):
     """Point the pipeline at the target's working directory (unless SNPIPE_DIR is already set)."""
-    if t.get('workdir') and not os.getenv('SNPIPE_DIR'):
-        Path(t['workdir']).mkdir(parents=True, exist_ok=True)
-        os.environ['SNPIPE_DIR'] = str(t['workdir'])
+    if not os.getenv('SNPIPE_DIR'):
+        wd = t.get('workdir') or t['dir'] / 'work'
+        Path(wd).mkdir(parents=True, exist_ok=True)
+        os.environ['SNPIPE_DIR'] = str(wd)
     from . import config
     config.workdir().mkdir(parents=True, exist_ok=True)
 
@@ -100,30 +158,29 @@ def in_range(dayobs, rng):
 
 
 def frames_for(t, part):
-    """Frame list (archive records) of ``part`` = 'science' | 'templates', restricted to its DAY-OBS range."""
+    """Archive frame records of ``part`` ('science' | 'reference'), restricted to its DAY-OBS range."""
     import json
     sel = t[part]
+    if sel is None:
+        raise TargetError(f"{t['file']}: no {part} section")
     src = sel['frames']
     if src == 'archive':
         from . import ingest
         lo, _, hi = sel['dayobs'].partition('-')
-        hi = hi or lo
         day = lambda d: f'{d[:4]}-{d[4:6]}-{d[6:]}'
-        frames = []
+        # exposures of a night can carry the next UTC date: query 2 days beyond, then select by DAY-OBS
+        end = (datetime.strptime(hi or lo, '%Y%m%d') + timedelta(days=2)).strftime('%Y-%m-%d')
+        frames, seen = [], set()
         for obj in [t['name']] + t['aliases']:
-            frames += ingest.query_archive(OBJECT=obj, start=day(lo), end=day(str(int(hi) + 2)),
-                                           RLEVEL=91, configuration_type='EXPOSE')
-        seen, uniq = set(), []
-        for f in frames:
-            if f['filename'] not in seen:
-                seen.add(f['filename'])
-                uniq.append(f)
-        frames, local = uniq, None
+            for f in ingest.query_archive(OBJECT=obj, start=day(lo), end=end, RLEVEL=91, configuration_type='EXPOSE'):
+                if f['filename'] not in seen:
+                    seen.add(f['filename'])
+                    frames.append(f)
+        local = None
     else:
         fj = Path(src) / 'frames.json'
         if not fj.exists():
             raise TargetError(f'{fj} not found (frames.json = the LCO archive frame records of the files; '
                               'see docs/guide/targets.md)')
         frames, local = json.load(open(fj)), Path(src)
-    frames = [f for f in frames if in_range(dayobs_of(f['filename']), sel['dayobs'])]
-    return frames, local
+    return [f for f in frames if in_range(dayobs_of(f['filename']), sel['dayobs'])], local

@@ -1,6 +1,6 @@
-"""The standard output of a reduction: review queues and the report (steps ``review_queue`` and ``report``).
+"""The standard report of a reduction (step ``report``).
 
-Both read the results folder of a run (``<workdir>/results/<universe>/``, the folder of ``-o``): the per-step
+It reads the results folder of a run (``<workdir>/results/<universe>/``, the folder of ``-o``): the per-step
 QA summaries, ``run.json`` and the light curves written by ``getmag``.
 
 report.md contains, in this order: the target and the choices (universe), the code version, one line per step
@@ -12,7 +12,6 @@ from pathlib import Path
 
 import numpy as np
 
-from . import review
 
 LC = (('lc_subtracted', 'with template subtraction (main product)'), ('lc_unsubtracted', 'without subtraction (includes host light)'))
 
@@ -22,25 +21,6 @@ def _load(p):
         return json.loads(Path(p).read_text())
     except (OSError, ValueError):
         return None
-
-
-def review_all(output, sample=5):
-    """One review queue per step that has per-frame results (warn/fail + a random ok sample, with packets)."""
-    res = Path(output).parent
-    queues = {}
-    for f in sorted(res.glob('*.json')):
-        s = _load(f)
-        if not isinstance(s, dict) or not s.get('frames') or s.get('stage') not in review.QUESTIONS:
-            continue
-        try:
-            q = review.queue(s['stage'], sample=sample, summary=f, name=f.stem)
-            items = json.loads(q.read_text())['items']
-            queues[f.stem] = dict(stage=s['stage'], queue=str(q), n_items=len(items),
-                                  n_warn_fail=sum(i['reason'] == 'warn/fail' for i in items))
-        except Exception as e:
-            queues[f.stem] = dict(stage=s['stage'], error=f'{type(e).__name__}: {e}')
-    Path(output).write_text(json.dumps(queues, indent=1))
-    return queues
 
 
 def _plot(res, out):
@@ -97,9 +77,10 @@ def write(output, target_file=None):
     name = t['name'] if t else run.get('target', '?')
     L += [f'# Reduction report: {name}', '']
     if t:
+        ref = (f"reference DAY-OBS {t['reference']['dayobs']} (camera {t['reference']['camera']})" if t['reference']
+               else 'no reference (no subtraction)')
         L += [f"RA {float(t['ra']):.6f}, Dec {float(t['dec']):+.6f} · science DAY-OBS {t['science']['dayobs']} · "
-              f"reference DAY-OBS {t['templates']['dayobs']} (camera {t['templates']['camera']}) · "
-              f"workdir `{run.get('workdir', '')}`", '']
+              f"{ref} · workdir `{run.get('workdir', '')}`", '']
     code = run.get('code', {})
     L += [f"Code: snpipe {code.get('snpipe', '?')}, commit `{code.get('commit', 'unknown')}`"
           + (' **with uncommitted changes**' if code.get('dirty') else '') + f", Python {code.get('python', '?')}.",

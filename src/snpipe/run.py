@@ -12,8 +12,15 @@ each command, keeping a record of what ran:
 
 Exit codes of a step decide what happens next (see the header of astra.yaml): 0 and 1 continue (1 = some frames
 failed their checks and are left out downstream); 2, 3, 4 stop the steps that depend on it (``--keep-going``
-still runs independent steps). A step whose command, inputs and result are unchanged since a successful run is
-not repeated (resume); ``--from STEP`` reruns STEP and everything after it.
+still runs independent steps). ``snpipe run`` itself exits 0 when every step finished (with or without failed
+frames), otherwise with the exit code of the first step that stopped.
+
+Resume: a step is not repeated when its command, the target's facts (name, coordinates, nights, frame folders),
+the signatures of its input steps and its result file are unchanged since it finished. Code changes and
+``resources`` do not invalidate results: after updating the code, rerun with ``--from STEP``.
+
+A target without a ``reference`` section has no subtraction: every step downstream of the reference frames is
+left out, except the review queue and the report (outputs of type ``report``), which use what exists.
 
 A universe other than baseline gets its own working directory (``<workdir>/universe-<id>``) because the pipeline
 keeps per-frame products and the database there: two sets of choices must not share them.
@@ -62,9 +69,22 @@ def active(item, choice):
     return True
 
 
-def plan(analysis, choice):
+def needs_reference(analysis, root='ingest_reference'):
+    """Steps downstream of the reference frames, except collectors (type 'report')."""
+    down, changed = {root}, True
+    while changed:
+        changed = False
+        for o in analysis['outputs']:
+            if o['id'] not in down and any(i in down for i in o.get('inputs', [])):
+                down.add(o['id'])
+                changed = True
+    return {o['id'] for o in analysis['outputs'] if o['id'] in down and o.get('type') != 'report'}
+
+
+def plan(analysis, choice, has_reference=True):
     """Active steps in dependency order (stable: file order among independent steps)."""
-    outs = {o['id']: o for o in analysis['outputs'] if active(o, choice)}
+    skip = set() if has_reference else needs_reference(analysis)
+    outs = {o['id']: o for o in analysis['outputs'] if active(o, choice) and o['id'] not in skip}
     inputs = {i['id'] for i in analysis.get('inputs', [])}
     inactive = {o['id'] for o in analysis['outputs']} - set(outs)
     missing = [d for d in analysis.get('decisions', {}) if d not in choice]
@@ -116,26 +136,31 @@ def code_version():
     return v
 
 
-def _sig(cmd, step, state):
-    """Signature of a step: its command and the signatures of the steps it depends on."""
-    parts = [cmd] + [state.get(i, {}).get('sig', i) for i in step.get('inputs', [])]
+def _sig(cmd, step, state, facts=''):
+    """Signature of a step: its command, the target's facts and the signatures of the steps it depends on."""
+    parts = [cmd, facts] + [str(state.get(i, {}).get('sig', i)) for i in step.get('inputs', [])]
     return hashlib.sha256('\n'.join(parts).encode()).hexdigest()[:16]
 
 
 def workdir_for(t, universe):
-    base = Path(t['workdir'] or os.environ.get('SNPIPE_DIR') or (t['dir'] / 'work'))
+    base = Path(t['workdir'] or os.environ.get('SNPIPE_DIR') or (Path(t['dir']) / 'work'))
     return base if universe == 'baseline' else base / f'universe-{universe}'
 
 
+def _print(line):
+    print(line, flush=True)
+
+
 def run(target_dir, universe='baseline', only=None, start=None, dry_run=False, keep_going=False, analysis=None,
-        echo=print):
+        echo=_print):
     t = T.load(target_dir)
     tdir = Path(t['dir'])
     u, upath = load_universe(tdir, universe)
     choice = u.get('decisions', {})
     apath = Path(analysis) if analysis else recipe_dir() / 'astra.yaml'
     a = load_analysis(apath)
-    steps = plan(a, choice)
+    steps = plan(a, choice, has_reference=bool(t['reference']))
+    facts = T.facts(t)
     wd = workdir_for(t, universe)
     res = wd / 'results' / universe
     paths = {'target': t['file']}
@@ -157,14 +182,14 @@ def run(target_dir, universe='baseline', only=None, start=None, dry_run=False, k
     forced = set()
     if start:
         forced = set(ids[ids.index(start):])
-    blocked, summary = set(), {}
+    blocked, summary, first_stop = set(), {}, 0
     for s in steps:
         sid = s['id']
         if only and sid != only:
             summary[sid] = state.get(sid, {}).get('status', 'not run')
             continue
         cmd = expand(s['recipe']['command'].strip(), s, paths, choice, paths[sid])
-        sig = _sig(cmd, s, state)
+        sig = _sig(cmd, s, state, facts)
         if any(i in blocked for i in s.get('inputs', [])):
             blocked.add(sid)
             summary[sid] = 'blocked'
@@ -196,12 +221,12 @@ def run(target_dir, universe='baseline', only=None, start=None, dry_run=False, k
         statefile.write_text(json.dumps(dict(target=t['name'], universe=universe, workdir=str(wd),
                                              code=code_version(), steps=state), indent=1))
         if rc not in CONTINUE:
+            first_stop = first_stop or rc
             blocked.add(sid)
             echo(f'!!! {sid} stopped: see {res / "logs" / (sid + ".log")}')
             if not keep_going:
                 break
-    return summary, (0 if all(not str(v).startswith(('blocked', 'config', 'missing', 'external', 'error'))
-                              for v in summary.values()) else 1)
+    return summary, first_stop
 
 
 def status(target_dir, universe='baseline'):
@@ -212,37 +237,44 @@ def status(target_dir, universe='baseline'):
     return json.loads(f.read_text())
 
 
-def init_target(path, name, ra, dec, science, templates, camera, frames='archive', aliases=(), workdir=None):
-    """Write targets/<name>/target.yaml and universes/baseline.yaml (the old-pipeline defaults)."""
+def init_target(path, name, ra, dec, science, reference=None, camera=None, frames='archive', aliases=(),
+                workdir=None):
+    """Write <path>/target.yaml and universes/baseline.yaml (the old-pipeline defaults)."""
     d = Path(path)
     (d / 'universes').mkdir(parents=True, exist_ok=True)
     tf = d / 'target.yaml'
     if tf.exists():
         raise T.TargetError(f'{tf} exists')
-    doc = {'name': name, 'aliases': list(aliases), 'ra': ra, 'dec': dec}
+    doc = {'schema_version': T.SCHEMA_VERSION, 'name': name, 'aliases': list(aliases), 'ra': ra, 'dec': dec}
     if workdir:
         doc['workdir'] = str(workdir)
     doc['science'] = {'dayobs': science, 'frames': str(frames)}
-    doc['templates'] = {'dayobs': templates, 'camera': camera}
+    if reference:
+        doc['reference'] = {'dayobs': reference, 'camera': camera}
     doc['resources'] = {'jobs': 8, 'diff_jobs': 2}
-    tf.write_text('# Facts about the object (docs/guide/targets.md). Choices go in universes/*.yaml.\n'
+    tf.write_text('# The object and its frames (docs/guide/targets.md). Method choices go in universes/*.yaml.\n'
                   + yaml.safe_dump(doc, sort_keys=False))
     shutil.copy(recipe_dir() / 'universes' / 'baseline.yaml', d / 'universes' / 'baseline.yaml')
     T.load(tf)
     return tf
 
 
-def sbatch_script(target_dir, universe='baseline', partition='shared', hours=48, mem='32G'):
-    """A SLURM job script that runs the whole recipe (resumes if resubmitted)."""
+def sbatch_script(target_dir, universe='baseline', hours=48):
+    """A SLURM job script that runs the whole recipe (it resumes if resubmitted). Sized from the target's
+    resources: cores = max(jobs, diff_jobs), memory = 8 GB per subtraction worker + 16 GB."""
     t = T.load(target_dir)
-    cpus = max(t['resources']['jobs'], 1)
+    r = t['resources']
+    cpus, mem = max(r['jobs'], r['diff_jobs']), 8 * r['diff_jobs'] + 16
+    parts = 'sapphire,itc_cluster' + (',shared' if mem <= 180 and cpus <= 48 else '')
+    out = workdir_for(t, universe) / 'results' / universe
     return f"""#!/bin/bash
 #SBATCH -J snpipe_{t['name']}
-#SBATCH -p {partition}
+#SBATCH -p {parts}
 #SBATCH -c {cpus}
-#SBATCH --mem={mem}
+#SBATCH --mem={mem}G
 #SBATCH -t {hours}:00:00
-#SBATCH -o {workdir_for(t, universe)}/results/{universe}/slurm_%j.log
-# environment: activate the one snpipe is installed in before submitting (sbatch passes it on)
+#SBATCH -o {out}/slurm_%j.log
+# Before sbatch: mkdir -p {out}; activate the environment snpipe is installed in (sbatch passes it on).
+export OMP_NUM_THREADS=1
 snpipe run {Path(t['dir']).resolve()} --universe {universe}
 """

@@ -40,24 +40,12 @@ A season of a few hundred frames takes hours, mostly difference imaging (~1-3 mi
 
 ## The steps
 
-| step | command (stage) | what it does |
-|---|---|---|
-| target_registered | `add-target` | target in the database |
-| science_frames, reference_frames | `ingest` | copy/download, unpack, register frames |
-| catalogs | `catalogs` | APASS, SDSS or Pan-STARRS, Gaia field catalogs |
-| wcs_science | `wcs` | astrometry checked against Gaia (only with `wcs_check: gaia`) |
-| cosmic_science | `cosmic` | cosmic rays |
-| psf_science | `psf` | PSF model, aperture correction, star photometry |
-| snphot_science | `psfmag` | photometry of the transient |
-| zeropoints_bv, zeropoints_gri | `zcat` | zero points and colour terms |
-| mag_science | `mag` | calibrated magnitudes |
-| lc_unsubtracted | `getmag` | light curve without subtraction |
-| reference_marked, reference_cosmic, reference_psf, reference_zeropoints_* | `cosmic`, `template`, `psf`, `zcat` | prepare the reference frames |
-| difference_images | `diff` | PyZOGY difference images |
-| psf_difference, snphot_difference, zeropoints_difference_*, mag_difference | `psf`, `psfmag`, `zcat`, `mag` | photometry of the transient on the difference images |
-| lc_subtracted | `getmag` | the template-subtracted light curve (main product) |
-| review_queue | `review-all` | frames to look at, with pictures |
-| report | `report` | report.md |
+25 steps, from registering the target to the report: science frames (ingest, cosmic rays, PSF, transient
+photometry, zero points, magnitudes, unsubtracted light curve), the reference frames (cleaned, marked, PSF, zero
+points), the difference images and their photometry (subtracted light curve), then the review queue and the
+report. The full list with what each step does and which decisions it uses: [../reference/recipe.md](../reference/recipe.md);
+`snpipe run TARGET --dry-run` prints the exact commands. Step ids are `<stage>_<role>`, e.g. `psf_science`,
+`psf_reference`, `diff_science`.
 
 What each stage checks, and what to do when it complains: [checks.md](checks.md).
 
@@ -82,12 +70,12 @@ Every step is a normal command you can run yourself, e.g. to redo one filter:
 
 ```bash
 snpipe psf --target-file targets/sn2025rbs -f B -F            # -F: redo frames that are already done
-snpipe psf --target-file targets/sn2025rbs --frames templates --filetype 4
+snpipe psf --target-file targets/sn2025rbs --frames reference --filetype 4
 snpipe psf -n 2025rbs -e 20250801-20250810 -T fa              # without a target file (needs SNPIPE_DIR)
 ```
 
 Frame selection (as the old `lscloop.py`): `-n NAME`, `-e YYYYMMDD-YYYYMMDD` (DAY-OBS), `-f FILTER...`,
-`-T STRING` (file-name substring, e.g. a camera), `-d ID`, `--filetype 1|3|4` (science | difference | reference),
+`-T STRING` (file-name substring, e.g. a camera), `-d ID`, `--filetype 1|3|4` (science | difference | reference image),
 `-b STAGE` (only frames whose STAGE is not done), `--frames-file LIST`. `-j N` frames in parallel. All options:
 [../reference/cli.md](../reference/cli.md).
 

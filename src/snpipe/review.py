@@ -256,3 +256,29 @@ def verdict(frame, stage, v, reason, params=None, who='agent', conn=None):
         d.setdefault(stage, {})[frame] = params
         knobs.write_text(json.dumps(d, indent=1))
     return rec
+
+
+def _load(p):
+    try:
+        return json.loads(Path(p).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def review_all(output, sample=5):
+    """One review queue per step that has per-frame results (warn/fail + a random ok sample, with packets)."""
+    res = Path(output).parent
+    queues = {}
+    for f in sorted(res.glob('*.json')):
+        s = _load(f)
+        if not isinstance(s, dict) or not s.get('frames') or s.get('stage') not in QUESTIONS:
+            continue
+        try:
+            q = queue(s['stage'], sample=sample, summary=f, name=f.stem)
+            items = json.loads(q.read_text())['items']
+            queues[f.stem] = dict(stage=s['stage'], queue=str(q), n_items=len(items),
+                                  n_warn_fail=sum(i['reason'] == 'warn/fail' for i in items))
+        except Exception as e:
+            queues[f.stem] = dict(stage=s['stage'], error=f'{type(e).__name__}: {e}')
+    Path(output).write_text(json.dumps(queues, indent=1))
+    return queues

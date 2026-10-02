@@ -49,7 +49,7 @@ snpipe verdict cpt1m012-fa06-20240723-0133-e91.fits psf redo --param datamax=450
 snpipe run targets/sn2024pxl --from psf_science     # psf redoes the reset frame with the knobs, then everything after
 ```
 
-Use `--from` with the step of the stage you changed (psf_science, snphot_science, difference_images, ...); the
+Use `--from` with the step of the stage you changed (psf_science, psfmag_science, diff_science, ...); the
 later steps recompute the light curves and the report.
 
 Give a frame at most two `redo` rounds; if it still fails, mark it `bad` with the reason and leave it for a person.

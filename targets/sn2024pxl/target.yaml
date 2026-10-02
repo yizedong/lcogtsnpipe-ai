@@ -2,15 +2,17 @@
 # Paths use two environment variables so the same file works on any machine:
 #   SNPIPE_RAW   folder that holds the raw-frame folders (each with frames.json from the LCO archive)
 #   SNPIPE_WORK  folder for working directories (database, products, results)
+schema_version: 1
 name: 2024pxl
 aliases: [SN2024pxl, SN 2024pxl]
-ra: 263.113958          # TNS
+ra: 263.113958
 dec: 7.062411
+coordinates: TNS
 workdir: ${SNPIPE_WORK}/sn2024pxl
 science:
   dayobs: 20240722-20241110
   frames: ${SNPIPE_RAW}/2024pxl_sel      # BgVri, 1m0 + 0m4 (rawdata/fetch.py)
-templates:
+reference:
   dayobs: 20180306                       # 2018-03-07 UTC; the frames were taken for SN 2017drh (same galaxy)
   camera: fl                             # 1-m Sinistro fl05 at McDonald
   frames: ${SNPIPE_RAW}/templates_2017drh

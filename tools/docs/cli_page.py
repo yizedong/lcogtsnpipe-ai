@@ -12,25 +12,8 @@ from snpipe import cli
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def parser():
-    """Capture the parser that cli.main builds, without running a command."""
-    captured = {}
-    real = argparse.ArgumentParser.parse_args
-
-    def grab(self, *a, **k):
-        captured['p'] = self
-        raise SystemExit(0)
-    argparse.ArgumentParser.parse_args = grab
-    try:
-        with contextlib.suppress(SystemExit):
-            cli.main([])
-    finally:
-        argparse.ArgumentParser.parse_args = real
-    return captured['p']
-
-
 def main():
-    p = parser()
+    p = cli.parser()
     subs = next(a for a in p._actions if isinstance(a, argparse._SubParsersAction))
     helps = {c.dest: c.help for c in subs._choices_actions}
     L = ['# Command reference', '',
