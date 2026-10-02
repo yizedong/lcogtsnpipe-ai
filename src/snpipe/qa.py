@@ -85,12 +85,23 @@ def write_frame(qa: FrameQA, image_path):
     return out
 
 
-def write_summary(stage, frames, params=None, started=None):
+# a 'skipped' frame is either already done (fine) or missing a prerequisite (an earlier stage did not run or
+# failed). Messages of the first kind contain one of these words; every other skip counts as missing input.
+DONE_WORDS = ('already', 'exists')
+
+
+def skipped_missing(frames):
+    return [f.frame for f in frames if f.status == 'skipped' and not any(w in ' '.join(f.messages) for w in DONE_WORDS)]
+
+
+def write_summary(stage, frames, params=None, started=None, out=None):
     counts = {s: sum(f.status == s for f in frames) for s in STATUS_ORDER}
+    missing = skipped_missing(frames)
     summary = {
         'stage': stage,
         'status': 'fail' if counts['fail'] else ('warn' if counts['warn'] else 'ok'),
         'counts': counts,
+        'skipped_missing_input': missing,
         'n_frames': len(frames),
         'params': params or {},
         'software': {'snpipe': __version__, 'python': platform.python_version()},
@@ -106,8 +117,17 @@ def write_summary(stage, frames, params=None, started=None):
     text = json.dumps(summary, indent=1, default=_jsonable)
     (d / f'{stage}-{stamp}.json').write_text(text)
     (d / f'{stage}-latest.json').write_text(text)
+    if out:
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        Path(out).write_text(text)
     return summary
 
 
 def exit_code(summary):
-    return EXIT['qa_fail'] if summary['counts']['fail'] else EXIT['ok']
+    """1 if any frame failed its gates; 3 if nothing was processed because inputs were missing; else 0."""
+    c = summary['counts']
+    if c['fail']:
+        return EXIT['qa_fail']
+    if not (c['ok'] or c['warn']) and summary.get('skipped_missing_input'):
+        return EXIT['missing_input']
+    return EXIT['ok']

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lcogtsnpipe-ai"
 version = "0.1.0"
-description = "IRAF-free, agent-checkable rewrite of the LCOGT supernova photometry pipeline (lcogtsnpipe)"
+description = "IRAF-free, agent-checkable rewrite of the LCOGT supernova photometry pipeline (lcogtsnpipe); part of Transient SLOP"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -35,4 +35,4 @@ snpipe = "snpipe.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-snpipe = ["data/**/*"]
+snpipe = ["data/**/*", "pipeline/*.yaml", "pipeline/universes/*.yaml"]

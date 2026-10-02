@@ -62,6 +62,8 @@ def packet(stage, frame, conn=None):
     row = db.get_frame(frame, conn)
     img = Path(row['filepath']) / frame
     qafile = Path(str(img).replace('.fits', f'.{stage}.qa.json'))
+    if stage == 'diff' and not qafile.exists():   # diff QA is filed under the science frame
+        qafile = Path(row['filepath']) / (frame.split('.optimal')[0] + '.diff.qa.json')
     qa = json.loads(qafile.read_text()) if qafile.exists() else {}
     out = _rdir(stage) / frame.replace('.fits', '.png')
     if stage == 'psf':
@@ -143,9 +145,24 @@ def packet(stage, frame, conn=None):
     return out
 
 
-def ensemble(stage, keys, group=('filter', 'tel'), z=3.5, conn=None):
+def _summary(stage, summary=None):
+    """A stage summary: the given file (e.g. a step result of ``snpipe run``) or ``qa/<stage>-latest.json``
+    (which is the summary of the LAST call of that stage only)."""
+    return json.loads(Path(summary or config.workdir() / 'qa' / f'{stage}-latest.json').read_text())
+
+
+def diff_image_of(frame, conn=None):
+    """The default difference image made from science ``frame`` (diff QA is filed under the science frame)."""
+    if '.diff.' in frame:
+        return frame
+    rows = db.query('SELECT nameout FROM photpairing WHERE namein=?', (frame,), conn)
+    names = [r['nameout'] for r in rows if not any(t in r['nameout'] for t in ('.zp.', '.cut.'))]
+    return names[0] if names else None
+
+
+def ensemble(stage, keys, group=('filter', 'tel'), z=3.5, conn=None, summary=None):
     """Flag frames whose metric deviates from its peers (robust z-score)."""
-    s = json.loads((config.workdir() / 'qa' / f'{stage}-latest.json').read_text())
+    s = _summary(stage, summary)
     frames = [f for f in s['frames'] if f['status'] in ('ok', 'warn')]
     flags = {}
     for k in keys:
@@ -168,20 +185,30 @@ def ensemble(stage, keys, group=('filter', 'tel'), z=3.5, conn=None):
     return flags
 
 
-def queue(stage, sample=5, seed=0, conn=None):
-    s = json.loads((config.workdir() / 'qa' / f'{stage}-latest.json').read_text())
-    todo = [f['frame'] for f in s['frames'] if f['status'] in ('warn', 'fail')]
-    ok = [f['frame'] for f in s['frames'] if f['status'] == 'ok']
+def queue(stage, sample=5, seed=0, conn=None, summary=None, name=None):
+    """Review queue of one stage summary: every warn/fail frame + ``sample`` random ok frames, with packets.
+    Written to ``review/<name or stage>/queue.json``; returns its path."""
+    s = _summary(stage, summary)
+    frames = s.get('frames', [])
+    status = {f['frame']: f['status'] for f in frames}
+    messages = {f['frame']: '; '.join(f.get('messages', [])) for f in frames}
+    todo = [f['frame'] for f in frames if f['status'] in ('warn', 'fail')]
+    ok = [f['frame'] for f in frames if f['status'] == 'ok']
     random.Random(seed).shuffle(ok)
     items = []
     for fr in todo + ok[:sample]:
+        target = diff_image_of(fr, conn) if stage == 'diff' else fr   # verdicts on a diff name the diff image
         try:
-            p = str(packet(stage, fr, conn))
+            if target is None:
+                raise FileNotFoundError('no difference image')
+            p = str(packet(stage, target, conn))
         except Exception as e:  # products missing for failed frames
             p = f'unavailable: {e}'
-        items.append(dict(frame=fr, packet=p, reason='spot check' if fr in ok else 'warn/fail'))
-    out = _rdir(stage) / 'queue.json'
-    out.write_text(json.dumps(dict(stage=stage, question=QUESTIONS[stage][0], items=items), indent=1))
+        items.append(dict(frame=target or fr, science_frame=fr if stage == 'diff' else None, status=status[fr],
+                          messages=messages[fr], packet=p, reason='spot check' if fr in ok else 'warn/fail'))
+    out = _rdir(name or stage) / 'queue.json'
+    out.write_text(json.dumps(dict(stage=stage, summary=str(summary or 'qa/latest'), question=QUESTIONS[stage][0],
+                                   verdicts=QUESTIONS[stage][1], items=items), indent=1))
     return out
 
 

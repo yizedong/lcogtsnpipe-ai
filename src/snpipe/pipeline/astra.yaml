@@ -1,0 +1,376 @@
+# The lcogtsnpipe-ai reduction of ONE transient, as an ASTRA analysis (https://github.com/LightconeResearch/astra-spec).
+#
+# This file is the same for every object. What differs per object lives in its target folder:
+#   targets/<name>/target.yaml              facts: coordinates, science and reference nights, where the frames are
+#   targets/<name>/universes/baseline.yaml  choices: one option for every decision below
+# Run it with:   snpipe run targets/<name>                (docs/guide/running.md)
+#
+# Each output is one pipeline step. Its recipe is the real snpipe command; {inputs.target} is the target file,
+# {output} the step's result file in <workdir>/results/<universe>/, {decisions.X} the option chosen in the universe.
+# A step's result is the JSON summary of its quality checks (status, per-frame metrics and limits); the
+# command's exit code says what to do next: 0 ok, 1 some frames failed their checks (continue: they are left
+# out of the light curve), 2 configuration error, 3 missing input, 4 external service (catalog/archive) failed.
+version: 0.0.14
+id: lcogtsnpipe_ai_reduction
+name: LCO light curve of one transient (lcogtsnpipe-ai)
+description: >-
+  Reduction of LCO BANZAI images of one transient into a calibrated light curve, with lcogtsnpipe-ai (snpipe), the
+  IRAF-free successor of lcogtsnpipe and part of Transient SLOP (Single-object Legacy Observation Products).
+  Steps: register the target, copy the frames, field catalogs, cosmic rays, PSF and aperture photometry, zero
+  points, calibrated magnitudes; reference (template) frames; PyZOGY difference images and their photometry;
+  light curves with and without template subtraction; review queue; report. Every step checks every frame.
+tags: [photometry, lco, supernova, transient, difference-imaging]
+inputs:
+- id: target
+  type: data
+  source: targets/<name>/target.yaml
+  description: >-
+    The target file (facts about the object): name and aliases, coordinates, DAY-OBS ranges of the science and
+    reference frames, reference camera, folders with the frames (or the LCO archive), working directory.
+outputs:
+# ---------------------------------------------------------------- setup
+- id: target_registered
+  type: data
+  format: json
+  description: Target (name, aliases, coordinates) in the pipeline database.
+  inputs: [target]
+  recipe:
+    command: snpipe add-target --target-file {inputs.target} --qa-out {output}
+- id: science_frames
+  type: data
+  format: json
+  description: Science frames of the DAY-OBS range copied (or downloaded), unpacked and registered.
+  inputs: [target, target_registered]
+  recipe:
+    command: snpipe ingest --target-file {inputs.target} --frames science --qa-out {output}
+- id: reference_frames
+  type: data
+  format: json
+  description: Frames of the reference night copied, unpacked and registered (attached to this target whatever their OBJECT).
+  inputs: [target, target_registered]
+  recipe:
+    command: snpipe ingest --target-file {inputs.target} --frames templates --qa-out {output}
+- id: catalogs
+  type: data
+  format: json
+  description: Field catalogs (APASS for B/V, SDSS or Pan-STARRS for g/r/i, Gaia for astrometry), with the old pipeline's cuts.
+  inputs: [target, target_registered]
+  decisions: [sloan_source]
+  recipe:
+    command: snpipe catalogs --target-file {inputs.target} --sloan-source {decisions.sloan_source} -o {output}
+# ---------------------------------------------------------------- science frames, no subtraction
+- id: wcs_science
+  type: metric
+  format: json
+  description: Astrometry of every science frame checked against Gaia; re-fitted when it fails the check.
+  inputs: [target, science_frames, catalogs]
+  decisions: [wcs_check]
+  when: [wcs_check.gaia]
+  recipe:
+    command: snpipe wcs --target-file {inputs.target} --qa-out {output}
+- id: cosmic_science
+  type: metric
+  format: json
+  description: Cosmic rays found and cleaned (astroscrappy, old pipeline settings).
+  inputs: [target, science_frames, wcs_science]
+  recipe:
+    command: snpipe cosmic --target-file {inputs.target} --qa-out {output}
+- id: psf_science
+  type: metric
+  format: json
+  description: PSF model, aperture correction and star photometry (sn2 table) of every science frame.
+  inputs: [target, cosmic_science, catalogs]
+  decisions: [psf_model, psf_auto_fix, max_apercorr, psf_nstars]
+  recipe:
+    command: >-
+      snpipe psf --target-file {inputs.target} --model {decisions.psf_model} --auto-fix {decisions.psf_auto_fix}
+      --max-apercorr {decisions.max_apercorr} --nstars {decisions.psf_nstars} --qa-out {output}
+- id: snphot_science
+  type: metric
+  format: json
+  description: PSF and aperture photometry of the transient on the science frames (background fitted around it).
+  inputs: [target, psf_science]
+  recipe:
+    command: snpipe psfmag --target-file {inputs.target} --qa-out {output}
+- id: zeropoints_bv
+  type: metric
+  format: json
+  description: Zero points and colour terms of the B and V frames.
+  inputs: [target, psf_science, catalogs]
+  decisions: [bv_catalog]
+  recipe:
+    command: snpipe zcat --target-file {inputs.target} -f landolt --field {decisions.bv_catalog} --qa-out {output}
+- id: zeropoints_gri
+  type: metric
+  format: json
+  description: Zero points and colour terms of the g, r and i frames.
+  inputs: [target, psf_science, catalogs]
+  decisions: [gri_catalog]
+  recipe:
+    command: snpipe zcat --target-file {inputs.target} -f sloan --field {decisions.gri_catalog} --qa-out {output}
+- id: mag_science
+  type: metric
+  format: json
+  description: Calibrated magnitudes of the transient on the science frames (PSF photometry, colour-corrected).
+  inputs: [target, snphot_science, zeropoints_bv, zeropoints_gri]
+  recipe:
+    command: snpipe mag --target-file {inputs.target} --type fit --qa-out {output}
+- id: lc_unsubtracted
+  type: table
+  format: csv
+  description: >-
+    Light curve without template subtraction (includes host light): dateobs, jd, mag, dmag, telescope, filter,
+    magtype, flag; plus an .ecsv with the frame of every point. Frames that failed a check are left out.
+  inputs: [target, mag_science]
+  recipe:
+    command: snpipe getmag --target-file {inputs.target} --type mag -o {output}
+# ---------------------------------------------------------------- reference (template) frames
+- id: reference_marked
+  type: metric
+  format: json
+  description: Cosmic rays cleaned on the reference-night frames of the reference camera, then marked as references (filetype 4).
+  inputs: [target, reference_frames]
+  recipe:
+    command: >-
+      snpipe cosmic --target-file {inputs.target} --frames templates &&
+      snpipe template --target-file {inputs.target} --frames templates --qa-out {output}
+- id: reference_cosmic
+  type: metric
+  format: json
+  description: Cosmic rays on the reference images.
+  inputs: [target, reference_marked]
+  recipe:
+    command: snpipe cosmic --target-file {inputs.target} --frames templates --filetype 4 --qa-out {output}
+- id: reference_psf
+  type: metric
+  format: json
+  description: PSF model and star photometry of the reference images (the difference images need both).
+  inputs: [target, reference_cosmic, catalogs]
+  decisions: [psf_model, psf_auto_fix, max_apercorr, psf_nstars]
+  recipe:
+    command: >-
+      snpipe psf --target-file {inputs.target} --frames templates --filetype 4 --model {decisions.psf_model}
+      --auto-fix {decisions.psf_auto_fix} --max-apercorr {decisions.max_apercorr} --nstars {decisions.psf_nstars}
+      --qa-out {output}
+- id: reference_zeropoints_bv
+  type: metric
+  format: json
+  description: Zero points of the B and V reference images (difference images normalised to the reference use them).
+  inputs: [target, reference_psf, catalogs]
+  decisions: [bv_catalog]
+  recipe:
+    command: >-
+      snpipe zcat --target-file {inputs.target} --frames templates --filetype 4 -f landolt --field {decisions.bv_catalog}
+      --qa-out {output}
+- id: reference_zeropoints_gri
+  type: metric
+  format: json
+  description: Zero points of the g, r and i reference images.
+  inputs: [target, reference_psf, catalogs]
+  decisions: [gri_catalog]
+  recipe:
+    command: >-
+      snpipe zcat --target-file {inputs.target} --frames templates --filetype 4 -f sloan --field {decisions.gri_catalog}
+      --qa-out {output}
+# ---------------------------------------------------------------- difference images
+- id: difference_images
+  type: metric
+  format: json
+  description: PyZOGY difference images, science minus reference (earliest reference per filter of the reference camera).
+  inputs: [target, psf_science, reference_psf, reference_zeropoints_bv, reference_zeropoints_gri]
+  decisions: [diff_normalize, diff_register, diff_region, diff_gain]
+  recipe:
+    command: >-
+      snpipe diff --target-file {inputs.target} --normalize {decisions.diff_normalize}
+      --register {decisions.diff_register} --region {decisions.diff_region} --gain {decisions.diff_gain}
+      --qa-out {output}
+- id: psf_difference
+  type: metric
+  format: json
+  description: PSF of every difference image (needed by the transient photometry on it).
+  inputs: [target, difference_images]
+  recipe:
+    command: snpipe psf --target-file {inputs.target} --filetype 3 --qa-out {output}
+- id: snphot_difference
+  type: metric
+  format: json
+  description: Photometry of the transient on the difference images.
+  inputs: [target, psf_difference]
+  decisions: [diff_bkg_order]
+  recipe:
+    command: >-
+      snpipe psfmag --target-file {inputs.target} --filetype 3 -x {decisions.diff_bkg_order}
+      -y {decisions.diff_bkg_order} --qa-out {output}
+- id: zeropoints_difference_bv
+  type: metric
+  format: json
+  description: Zero points of the B and V difference images (from the star table of the image they are normalised to).
+  inputs: [target, snphot_difference]
+  decisions: [bv_catalog, diff_phot_type]
+  recipe:
+    command: >-
+      snpipe zcat --target-file {inputs.target} --filetype 3 -f landolt --field {decisions.bv_catalog}
+      --type {decisions.diff_phot_type} --qa-out {output}
+- id: zeropoints_difference_gri
+  type: metric
+  format: json
+  description: Zero points of the g, r and i difference images.
+  inputs: [target, snphot_difference]
+  decisions: [gri_catalog, diff_phot_type]
+  recipe:
+    command: >-
+      snpipe zcat --target-file {inputs.target} --filetype 3 -f sloan --field {decisions.gri_catalog}
+      --type {decisions.diff_phot_type} --qa-out {output}
+- id: mag_difference
+  type: metric
+  format: json
+  description: Calibrated magnitudes of the transient on the difference images (checked against the unsubtracted ones).
+  inputs: [target, zeropoints_difference_bv, zeropoints_difference_gri, mag_science]
+  decisions: [diff_phot_type]
+  recipe:
+    command: snpipe mag --target-file {inputs.target} --filetype 3 --type {decisions.diff_phot_type} --qa-out {output}
+- id: lc_subtracted
+  type: table
+  format: csv
+  description: Template-subtracted light curve (the main product), same columns as lc_unsubtracted, plus .ecsv.
+  inputs: [target, mag_difference]
+  recipe:
+    command: snpipe getmag --target-file {inputs.target} --filetype 3 --type mag -o {output}
+# ---------------------------------------------------------------- review and report
+- id: review_queue
+  type: report
+  format: json
+  description: >-
+    Frames to look at: every warn/fail plus a random sample of ok frames, with PNG review packets, for an agent or
+    a person to give verdicts (snpipe verdict). Replaces the old interactive check* steps.
+  inputs: [target, lc_subtracted, lc_unsubtracted]
+  recipe:
+    command: snpipe review-all --target-file {inputs.target} -o {output}
+- id: report
+  type: report
+  format: md
+  description: >-
+    The standard report of the reduction: target and choices, per-step quality summary, frames left out and why,
+    light-curve plots and tables, provenance (code version, universe). Written as report.md with figures next to it.
+  inputs: [target, lc_subtracted, lc_unsubtracted, review_queue]
+  recipe:
+    command: snpipe report --target-file {inputs.target} -o {output}
+decisions:
+  sloan_source:
+    label: Catalog for the g, r, i calibration stars
+    default: sdss
+    rationale: Changes every g/r/i zero point. The old pipeline uses SDSS unless the field is outside it (then Pan-STARRS).
+    options:
+      sdss: {label: SDSS PhotoPrimary (comparecatalogs default)}
+      panstarrs: {label: Pan-STARRS1 DR1 (comparecatalogs -p); use for fields outside SDSS}
+  wcs_check:
+    label: Astrometry check
+    default: banzai
+    rationale: >-
+      The old pipeline trusts the BANZAI astrometry and a person runs checkwcs when something looks wrong; frames
+      that BANZAI flags (WCSERR != 0) are then skipped. The Gaia check measures every frame and re-fits failed ones,
+      which recovers those frames; it is not yet validated on a full season, so it is not the default.
+    options:
+      banzai: {label: Trust BANZAI (old pipeline)}
+      gaia: {label: Check every frame against Gaia DR3 and re-fit failures}
+  bv_catalog:
+    label: Catalog for the B, V zero points
+    default: apass
+    rationale: B and V cannot be calibrated to SDSS; APASS is the field catalog the manual uses.
+    options:
+      apass: {label: APASS DR9}
+      landolt: {label: Local Landolt sequence of the field (needs standard-star nights; U band)}
+  gri_catalog:
+    label: Catalog for the g, r, i zero points
+    default: sloan
+    rationale: The old pipeline and the 2024pxl paper calibrate g, r, i to SDSS.
+    options:
+      sloan: {label: 'SDSS (or the Pan-STARRS file, see sloan_source)'}
+      apass: {label: APASS}
+  psf_model:
+    label: PSF model
+    default: daophot
+    rationale: The PSF shape enters every PSF magnitude and the aperture correction.
+    options:
+      daophot: {label: Gaussian + 2x residual lookup table (DAOPHOT recipe; old pipeline)}
+      epsf: {label: photutils EPSFBuilder empirical PSF}
+  psf_auto_fix:
+    label: Automatic retries for failed PSFs
+    default: ladder
+    rationale: >-
+      The manual tells the user to retry a failed PSF with a larger FWHM, lower saturation level, more stars or
+      another catalog; without retries those frames are lost.
+    options:
+      ladder: {label: "Apply the manual's fixes automatically, re-checking after each"}
+      'off': {label: Single attempt (unattended old run)}
+  psf_nstars:
+    label: Number of PSF stars
+    default: n6
+    rationale: >-
+      Old default 6. With a PSF that is constant over the frame, 6 stars leave a 0.02-0.04 mag bias and 0.07-0.10 mag
+      scatter of PSF vs aperture magnitudes on 1-m frames (both pipelines); the manual suggests 12 as a remedy.
+    options:
+      n6: {label: 6 (old default)}
+      n12: {label: '12'}
+      n20: {label: '20'}
+  max_apercorr:
+    label: Largest accepted aperture correction (mag)
+    default: apco_0p1
+    rationale: Old pipeline default (--max_apercorr 0.1); a larger correction means the PSF does not describe the stars.
+    options:
+      apco_0p1: {label: 0.1 mag}
+      apco_0p2: {label: 0.2 mag (looser)}
+  diff_normalize:
+    label: Flux scale of the difference image
+    default: t
+    rationale: >-
+      Old default --normalize t: difference in reference units, calibrated with the reference's stars (and, since
+      bug fix B01, the reference's airmass).
+    options:
+      t: {label: reference (template)}
+      i: {label: science image}
+  diff_register:
+    label: Resampling of the reference onto the science pixels
+    default: adaptive
+    rationale: The old default was IRAF gregister drizzle (flux conserving); the manual warns the bilinear --no_iraf path may be worse.
+    options:
+      adaptive: {label: 'reproject_adaptive, flux conserving (closest to drizzle)'}
+      exact: {label: reproject_exact (area overlap) x pixel-area ratio; slow}
+      bilinear: {label: reproject_interp bilinear x pixel-area ratio}
+  diff_region:
+    label: Part of the frame that is subtracted
+    default: full
+    rationale: >-
+      The old pipeline subtracts the full frame. A 2048x2048 cutout around the target is about 4x cheaper but moved
+      SN magnitudes by up to 0.2 mag on 2024pxl (the flux-ratio fit then uses fewer stars).
+    options:
+      full: {label: Full frame (old pipeline)}
+      cutout: {label: 2048x2048 px around the target}
+  diff_gain:
+    label: Flux ratio between science and reference
+    default: fit
+    rationale: >-
+      Old default: PyZOGY fits it iteratively from stars in common. The ratio from the zero points is about 4x faster
+      but gave SN magnitudes 0.06 +- 0.04 mag fainter on 21 frames of 2024pxl (up to +0.2 on 0.4 m g/r/i); it
+      rescued 1 of 7 frames where the fit failed.
+    options:
+      fit: {label: PyZOGY iterative fit (old pipeline)}
+      zeropoint: {label: From the photometric zero points (fallback)}
+  diff_bkg_order:
+    label: Order of the background surface fitted around the transient on difference images
+    default: order1
+    rationale: >-
+      The old reductions (manual and 2024pxl paper runs) use -x 1 -y 1 on difference images, where the host has been
+      subtracted; unsubtracted frames keep the default order 3.
+    options:
+      order1: {label: First order (plane)}
+      order3: {label: Third order}
+  diff_phot_type:
+    label: Photometry of the transient on difference images
+    default: ph
+    rationale: >-
+      The old pipeline uses aperture photometry on difference images (the PyZOGY PSF is neither the science nor the
+      reference PSF).
+    options:
+      ph: {label: Aperture (3 FWHM)}
+      fit: {label: PSF fit}

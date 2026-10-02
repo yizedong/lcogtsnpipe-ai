@@ -1,0 +1,18 @@
+# Baseline choices: the old pipeline's defaults. Copy into targets/<name>/universes/ and change what you need.
+id: baseline
+description: Old-pipeline defaults (lcogtsnpipe as run for the 2024pxl paper; SDSS gri, APASS BV, PyZOGY).
+decisions:
+  sloan_source: sdss
+  wcs_check: banzai
+  bv_catalog: apass
+  gri_catalog: sloan
+  psf_model: daophot
+  psf_auto_fix: ladder
+  psf_nstars: n6
+  max_apercorr: apco_0p1
+  diff_normalize: t
+  diff_register: adaptive
+  diff_region: full
+  diff_gain: fit
+  diff_bkg_order: order1
+  diff_phot_type: ph

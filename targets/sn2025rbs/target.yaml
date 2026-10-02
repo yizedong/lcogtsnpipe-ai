@@ -1,0 +1,16 @@
+# SN 2025rbs — reference frames taken a year later, after the SN faded (night 2026-09-18).
+# SNPIPE_RAW / SNPIPE_WORK: see targets/sn2024pxl/target.yaml.
+name: 2025rbs
+aliases: [SN2025rbs, SN 2025rbs, 2025rbs_offset]
+ra: 339.265262          # CAT-RA/CAT-DEC of the frames pointed at the SN (= old pipeline run)
+dec: 34.418892
+workdir: ${SNPIPE_WORK}/sn2025rbs
+science:
+  dayobs: 20250715-20260917              # everything before the reference night
+  frames: ${SNPIPE_RAW}/2025rbs          # UBVgri 1m0, BVgri 0m4
+templates:
+  dayobs: 20260918
+  camera: fa                             # 1-m Sinistro (tfn1m001-fa20); 2 frames per filter
+resources:
+  jobs: 8
+  diff_jobs: 3

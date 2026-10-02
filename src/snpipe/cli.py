@@ -1,9 +1,16 @@
-"""``snpipe`` command line: one sub-command per stage, lscloop-like frame selection, QA + exit codes.
+"""``snpipe`` command line.
 
-    snpipe add-target 2024pxl --ra 263.113958 --dec 7.062411 --alias SN2024pxl
-    snpipe ingest --target 2024pxl --start 2024-07-22 --end 2024-11-10 [--local-dir DIR]
-    snpipe catalogs --target 2024pxl
-    snpipe cosmic|psf|zcat ... -n 2024pxl -e 20240722-20241110 [-f landolt|sloan|B V ...] [-j 8]
+Whole reductions (docs/guide/running.md):
+    snpipe init-target targets/sn2025xyz --name 2025xyz --ra .. --dec .. --science 20250801-20251231 \
+        --templates 20260901 --camera fa --frames /data/2025xyz
+    snpipe run targets/sn2025xyz [--universe baseline] [--from STEP] [--only STEP] [--dry-run]
+    snpipe status targets/sn2025xyz
+
+One stage at a time (what the recipe pipeline/astra.yaml runs; lscloop-like frame selection):
+    snpipe psf --target-file targets/sn2025xyz [--frames templates] [--filetype 4] [-f B V] [-j 8]
+    snpipe psf -n 2025xyz -e 20250801-20251231          (without a target file)
+Every stage prints a JSON summary, writes per-frame QA files and exits 0 ok, 1 some frames failed their
+checks, 2 configuration error, 3 missing input, 4 external service failed.
 """
 import argparse
 import json
@@ -15,6 +22,32 @@ from concurrent.futures import ProcessPoolExecutor
 from . import db, qa, sites
 
 log = logging.getLogger('snpipe')
+QA_OUT = None   # --qa-out: also write this call's stage summary here (the ASTRA output of a recipe)
+
+
+def apply_target_file(args):
+    """``--target-file``: fill -n / -e / --tempdate / --temptel / -j from the target's facts (explicit options win).
+    ``--frames science`` selects the science nights, ``--frames templates`` the reference night."""
+    tf = getattr(args, 'target_file', None)
+    if not tf:
+        return None
+    from . import target
+    t = target.load(tf)
+    target.activate(t)
+    if getattr(args, 'name', 'x') is None:
+        args.name = t['name']
+    part = getattr(args, 'frames', None) or 'science'
+    if getattr(args, 'epoch', 'x') is None:
+        args.epoch = t[part]['dayobs']
+    if getattr(args, 'tempdate', 'x') in (None, ''):
+        args.tempdate = t['templates']['dayobs']
+    if getattr(args, 'temptel', 'x') in (None, ''):
+        args.temptel = t['templates']['camera']
+    if getattr(args, 'jobs', 'x') is None:
+        args.jobs = t['resources']['diff_jobs' if args.cmd == 'diff' else 'jobs']
+    if part == 'templates' and getattr(args, 'telescope', 'x') is None:
+        args.telescope = t['templates']['camera']   # only the reference camera's frames of that night
+    return t
 
 
 def select_frames(args, conn=None):
@@ -61,6 +94,42 @@ def select_frames(args, conn=None):
     return rows
 
 
+def _whole(args):
+    from . import run, target
+    try:
+        if args.cmd == 'init-target':
+            f = run.init_target(args.target_dir, args.name, args.ra, args.dec, args.science, args.templates,
+                                args.camera, args.frames, args.alias, args.workdir)
+            print(json.dumps({'target_file': str(f)}))
+            return 0
+        if args.cmd == 'status':
+            s = run.status(args.target_dir, args.universe)
+            if s is None:
+                print(json.dumps({'status': 'not run'}))
+                return 0
+            print(f"{s['target']} / {s['universe']}  workdir {s['workdir']}  commit {s['code'].get('commit', '?')[:10]}")
+            for sid, st in s['steps'].items():
+                print(f"  {sid:28s} {st.get('status', ''):15s} exit {st.get('exit', ''):>2}  {st.get('seconds', '')} s")
+            return 0
+        if args.sbatch:
+            print(run.sbatch_script(args.target_dir, args.universe))
+            return 0
+        summary, rc = run.run(args.target_dir, args.universe, only=args.only, start=args.start,
+                              dry_run=args.dry_run, keep_going=args.keep_going, analysis=args.recipe)
+        print(json.dumps(summary, indent=1))
+        return rc
+    except target.TargetError as e:
+        print(json.dumps({'error': str(e)}))
+        return qa.EXIT['config']
+
+
+def _write_json(path, obj):
+    if path:
+        from pathlib import Path
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(json.dumps(obj, indent=1, default=str))
+
+
 def _safe(fn, frame, stage, **kw):
     """One frame's failure must not stop the stage: exceptions become a 'fail' FrameQA."""
     import traceback
@@ -102,7 +171,7 @@ def _run_stage(stage, frames, jobs, fn, **kw):
             r = _safe(fn, f, stage, **kw)
             _write_qa(r)
             results.append(r)
-    s = qa.write_summary(stage, results, params=kw, started=started)
+    s = qa.write_summary(stage, results, params=kw, started=started, out=QA_OUT)
     print(json.dumps({k: s[k] for k in ('stage', 'status', 'counts', 'n_frames', 'wall_seconds')}))
     return qa.exit_code(s)
 
@@ -159,13 +228,17 @@ def main(argv=None):
     sub = p.add_subparsers(dest='cmd', required=True)
 
     a = sub.add_parser('add-target')
-    a.add_argument('name')
-    a.add_argument('--ra', type=float, required=True)
-    a.add_argument('--dec', type=float, required=True)
+    a.add_argument('name', nargs='?')
+    a.add_argument('--target-file', help='target.yaml: name, coordinates and aliases from the file')
+    a.add_argument('--ra', type=float)
+    a.add_argument('--dec', type=float)
     a.add_argument('--alias', nargs='*', default=[])
+    a.add_argument('--qa-out', help='also write the result JSON here')
 
     a = sub.add_parser('ingest')
-    a.add_argument('--target', required=True, help='archive OBJECT name')
+    a.add_argument('--target-file', help='target.yaml: ingest its science or template frames (see --frames)')
+    a.add_argument('--frames', choices=['science', 'templates'], default='science')
+    a.add_argument('--target', help='archive OBJECT name (without --target-file)')
     a.add_argument('--start')
     a.add_argument('--end')
     a.add_argument('--filters', nargs='*')
@@ -173,17 +246,42 @@ def main(argv=None):
     a.add_argument('--frames-json', help='use a saved archive frame list instead of querying')
     a.add_argument('--local-dir', help='copy files from here instead of downloading')
     a.add_argument('-j', '--jobs', type=int, default=8)
+    a.add_argument('--qa-out', help='also write the result JSON here')
 
-    a = sub.add_parser('astra', help='write the ASTRA record of a reduction')
-    a.add_argument('target')
+    a = sub.add_parser('run', help='run the whole recipe (pipeline/astra.yaml) for a target folder')
+    a.add_argument('target_dir')
+    a.add_argument('--universe', default='baseline')
+    a.add_argument('--from', dest='start', help='rerun this step and every step after it')
+    a.add_argument('--only', help='run only this step')
+    a.add_argument('--dry-run', action='store_true', help='print the commands without running them')
+    a.add_argument('--keep-going', action='store_true', help='after a stopped step, still run independent steps')
+    a.add_argument('--recipe', help='another astra.yaml (default: the packaged pipeline/astra.yaml)')
+    a.add_argument('--sbatch', action='store_true', help='print a SLURM job script for this run instead')
+
+    a = sub.add_parser('status', help='what ran for a target, with status and time per step')
+    a.add_argument('target_dir')
+    a.add_argument('--universe', default='baseline')
+
+    a = sub.add_parser('init-target', help='create targets/<name>/target.yaml + universes/baseline.yaml')
+    a.add_argument('target_dir')
+    a.add_argument('--name', required=True)
     a.add_argument('--ra', type=float, required=True)
     a.add_argument('--dec', type=float, required=True)
     a.add_argument('--alias', nargs='*', default=[])
-    a.add_argument('--epoch', required=True)
-    a.add_argument('--tempdate', required=True)
-    a.add_argument('--raw-dir', required=True)
-    a.add_argument('--template-dir', required=True)
-    a.add_argument('--out', default='astra')
+    a.add_argument('--science', required=True, help='DAY-OBS range YYYYMMDD-YYYYMMDD')
+    a.add_argument('--templates', required=True, help='DAY-OBS of the reference night')
+    a.add_argument('--camera', required=True, help='camera prefix of the reference frames (fa, fl, sq, ...)')
+    a.add_argument('--frames', default='archive', help='folder with frames.json + the files, or archive')
+    a.add_argument('--workdir')
+
+    a = sub.add_parser('report', help='write the standard report of a run (report.md + figures)')
+    a.add_argument('--target-file')
+    a.add_argument('-o', '--output', required=True, help='results/<universe>/report.md')
+
+    a = sub.add_parser('review-all', help='review queues for every step of a run')
+    a.add_argument('--target-file')
+    a.add_argument('--sample', type=int, default=5)
+    a.add_argument('-o', '--output', required=True, help='results/<universe>/review_queue.json')
 
     a = sub.add_parser('review', help='build review packets/queue for a stage')
     a.add_argument('stage')
@@ -200,14 +298,20 @@ def main(argv=None):
     a.add_argument('--who', default='agent')
 
     a = sub.add_parser('catalogs')
-    a.add_argument('--target', required=True)
+    a.add_argument('--target-file')
+    a.add_argument('--target')
     a.add_argument('--fields', nargs='*', default=['landolt', 'apass', 'sloan', 'gaia'])
     a.add_argument('--panstarrs', action='store_true')
     a.add_argument('--sloan-source', choices=['sdss', 'panstarrs'], default='sdss')
     a.add_argument('-F', '--force', action='store_true')
+    a.add_argument('-o', '--output', help='also write the result JSON here')
 
     for stage in ('wcs', 'cosmic', 'psf', 'psfmag', 'zcat', 'template', 'diff', 'mag', 'getmag'):
         a = sub.add_parser(stage)
+        a.add_argument('--target-file', help='target.yaml (or its folder): fills -n, -e, --tempdate, --temptel, -j')
+        a.add_argument('--frames', choices=['science', 'templates'], default='science',
+                       help='with --target-file: which nights -e selects')
+        a.add_argument('--qa-out', help='also write the stage summary JSON here')
         a.add_argument('-n', '--name')
         a.add_argument('-e', '--epoch')
         a.add_argument('-f', '--filter', nargs='+')
@@ -217,7 +321,7 @@ def main(argv=None):
         a.add_argument('--filetype', type=int, default=1)
         a.add_argument('--frames-file', help='restrict to the frame names listed in this file')
         a.add_argument('-F', '--force', action='store_true')
-        a.add_argument('-j', '--jobs', type=int, default=8)
+        a.add_argument('-j', '--jobs', type=int, default=None, help='parallel frames (default 8, diff 2)')
         if stage == 'psf':
             a.add_argument('--fwhm', type=float)
             a.add_argument('--nstars', type=lambda v: int(str(v).lstrip('n')), default=6,
@@ -231,8 +335,9 @@ def main(argv=None):
             a.add_argument('--no-auto-fix', action='store_true', help='do not run the remediation ladder')
             a.add_argument('--auto-fix', choices=['ladder', 'off'], default='ladder')
         if stage == 'psfmag':
-            a.add_argument('-x', '--xord', type=int, default=3)
-            a.add_argument('-y', '--yord', type=int, default=3)
+            order = lambda v: int(str(v).replace('order', ''))   # also accepts the ASTRA option ids order1, order3
+            a.add_argument('-x', '--xord', type=order, default=3)
+            a.add_argument('-y', '--yord', type=order, default=3)
             a.add_argument('--bkg', type=float, default=4.)
             a.add_argument('--size', type=float, default=7.)
             a.add_argument('-c', '--no-recenter', action='store_true')
@@ -241,8 +346,8 @@ def main(argv=None):
             a.add_argument('--RA', type=float)
             a.add_argument('--DEC', type=float)
         if stage == 'diff':
-            a.add_argument('--tempdate', default='19990101-20080101')
-            a.add_argument('--temptel', default='')
+            a.add_argument('--tempdate', default=None, help='DAY-OBS (range) of the reference frames')
+            a.add_argument('--temptel', default='', help='camera prefix of the reference frames (fa, fl, sq...)')
             a.add_argument('--normalize', choices=['t', 'i'], default='t')
             a.add_argument('--unmask', action='store_true')
             a.add_argument('--register', default='adaptive', help='adaptive | exact | bilinear | bicubic')
@@ -270,16 +375,62 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING,
                         format='%(asctime)s %(name)s %(levelname)s %(message)s')
 
+    if args.cmd in ('run', 'status', 'init-target'):
+        return _whole(args)
+
+    global QA_OUT
+    QA_OUT = getattr(args, 'qa_out', None)
+    t = apply_target_file(args) if args.cmd not in ('add-target', 'ingest', 'catalogs', 'report', 'review-all') else None
+    if getattr(args, 'target_file', None) and t is None:
+        from . import target
+        t = target.load(args.target_file)
+        target.activate(t)
+    if args.cmd in ('wcs', 'cosmic', 'psf', 'psfmag', 'zcat', 'template', 'diff', 'mag', 'getmag') and args.jobs is None:
+        args.jobs = 2 if args.cmd == 'diff' else 8
+    if args.cmd == 'diff' and args.tempdate is None:
+        print(json.dumps({'stage': 'diff', 'status': 'fail', 'error': 'give --tempdate or --target-file'}))
+        return qa.EXIT['config']
+
     if args.cmd == 'add-target':
         from . import ingest
+        if t:
+            args.name, args.ra, args.dec, args.alias = t['name'], float(t['ra']), float(t['dec']), t['aliases']
+        if args.name is None or args.ra is None or args.dec is None:
+            print(json.dumps({'error': 'give NAME --ra --dec, or --target-file'}))
+            return qa.EXIT['config']
         tid = ingest.add_target(args.name, args.ra, args.dec)
         for al in args.alias:
             if db.target_by_name(al) is None:
                 db.insert('targetnames', {'name': al, 'targetid': tid, 'groupidcode': 32769})
-        print(json.dumps({'targetid': tid}))
+        res = {'targetid': tid, 'name': args.name, 'ra': args.ra, 'dec': args.dec, 'aliases': args.alias}
+        print(json.dumps(res))
+        if t:
+            _write_json(QA_OUT, res)
         return 0
+    if args.cmd == 'ingest' and t:
+        from . import ingest, target
+        tid = db.target_by_name(t['name'])
+        if tid is None:
+            print(json.dumps({'error': f"target {t['name']} not in the database: run add-target first"}))
+            return qa.EXIT['config']
+        frames, local = target.frames_for(t, args.frames)
+        frames = [f for f in frames if (not args.filters or f['primary_optical_element'] in args.filters)
+                  and (not args.tels or f['TELID'][:3] in args.tels)]
+        paths, new = ingest.run(frames, local, args.jobs, targetid=tid)
+        placed = {p.name for p in paths}
+        missing = sorted(f['filename'] for f in frames if f['filename'].replace('.fz', '') not in placed)
+        res = {'part': args.frames, 'dayobs': t[args.frames]['dayobs'], 'frames': len(frames),
+               'placed': len(paths), 'new_rows': new, 'missing': missing[:50]}
+        print(json.dumps(res))
+        _write_json(args.qa_out, res)
+        if not frames:
+            return qa.EXIT['missing_input']
+        return qa.EXIT['ok'] if len(paths) == len(frames) else qa.EXIT['missing_input']
     if args.cmd == 'ingest':
         from . import ingest
+        if not args.target:
+            print(json.dumps({'error': 'give --target or --target-file'}))
+            return qa.EXIT['config']
         if args.frames_json:
             frames = json.load(open(args.frames_json))
         else:
@@ -292,16 +443,24 @@ def main(argv=None):
         return qa.EXIT['ok'] if len(paths) == len(frames) else qa.EXIT['missing_input']
     if args.cmd == 'catalogs':
         from . import catalogs
-        tid = db.target_by_name(args.target)
+        tid = db.target_by_name(t['name'] if t else args.target)
+        if tid is None:
+            print(json.dumps({'error': 'unknown target: run add-target first'}))
+            return qa.EXIT['config']
         res = catalogs.run(tid, args.fields, use_panstarrs=args.panstarrs or args.sloan_source == 'panstarrs',
                            force=args.force)
         print(json.dumps(res))
+        _write_json(args.output, res)
         return qa.EXIT['external'] if any(v is None for v in res.values()) else 0
 
-    if args.cmd == 'astra':
-        from . import astra
-        print(astra.write(args.out, args.target, args.ra, args.dec, args.epoch, args.tempdate, args.raw_dir,
-                          args.template_dir, args.alias))
+    if args.cmd == 'report':
+        from . import report
+        print(json.dumps({'report': str(report.write(args.output, args.target_file))}))
+        return 0
+    if args.cmd == 'review-all':
+        from . import report
+        q = report.review_all(args.output, args.sample)
+        print(json.dumps({k: v.get('n_items', v.get('error')) for k, v in q.items()}))
         return 0
     if args.cmd == 'review':
         from . import review
@@ -327,7 +486,10 @@ def main(argv=None):
 
     frames = [r['filename'] for r in select_frames(args)]
     if not frames:
-        print(json.dumps({'stage': args.cmd, 'status': 'skipped', 'n_frames': 0}))
+        res = {'stage': args.cmd, 'status': 'skipped', 'n_frames': 0,
+               'message': 'no frames selected (check -n/-e/--filetype, or run the earlier stages)'}
+        print(json.dumps(res))
+        _write_json(QA_OUT, res)
         return qa.EXIT['missing_input']
     if args.cmd == 'wcs':
         return _run_stage('wcs', frames, args.jobs, _wcs, force=args.force)
@@ -358,7 +520,7 @@ def main(argv=None):
             row = db.get_frame(r.frame)
             from pathlib import Path
             qa.write_frame(r, Path(row['filepath']) / r.frame)
-        s = qa.write_summary('mag', res, params={'type': mtype}, started=started)
+        s = qa.write_summary('mag', res, params={'type': mtype}, started=started, out=QA_OUT)
         print(json.dumps({k: s[k] for k in ('stage', 'status', 'counts', 'n_frames')}))
         return qa.exit_code(s)
     if args.cmd == 'getmag':
@@ -366,9 +528,11 @@ def main(argv=None):
         t = getmag.run(frames, args.type or 'mag', args.combine, args.output, keep_failed=args.keep_failed)
         if not args.output:
             t.pprint(max_lines=-1, max_width=-1)
-        print(json.dumps({'stage': 'getmag', 'n_points': len(t), 'n_flagged': int(sum(t['flag'])) if len(t) else 0,
-                          'n_qa_failed': len(t.meta['qa_failed']),
-                          'qa_failed_kept': args.keep_failed, 'output': args.output}))
+        res = {'stage': 'getmag', 'n_points': len(t), 'n_flagged': int(sum(t['flag'])) if len(t) else 0,
+               'n_qa_failed': len(t.meta['qa_failed']), 'qa_failed': t.meta['qa_failed'],
+               'qa_failed_kept': args.keep_failed, 'output': args.output}
+        print(json.dumps({k: v for k, v in res.items() if k != 'qa_failed'}))
+        _write_json(QA_OUT, res)
         return 0 if len(t) else qa.EXIT['missing_input']
     if args.cmd == 'zcat':
         # zcat reads the other filters of the night from the DB: run serially (like lscloop)

@@ -59,7 +59,9 @@ def run_one(frame, conn=None, force=False):
     if not t.get('gaia_cat'):
         return qa.fail('no Gaia catalog for the target (run catalogs)')
     cat = catalogs.read(config.catalog_dir('gaia') / t['gaia_cat'])
-    with fits.open(img, mode='update' if force or row['wcs'] != 0 else 'readonly') as f:
+    # always 'update': a frame that starts as good can still fail the gate and be re-fitted below, and the
+    # refit must be saved (astropy writes only when the header changed; bugs.md O05)
+    with fits.open(img, mode='update') as f:
         data, hdr = f[0].data, f[0].header
         res = measure(data, hdr, cat)
         refit = row['wcs'] != 0 or force

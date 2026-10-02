@@ -13,6 +13,6 @@ body:
   - type: input
     attributes: {label: Filters and telescopes, placeholder: "U B V g r i; 1m0 0m4"}
   - type: input
-    attributes: {label: Templates, placeholder: "1m0 frames of night 2026-09-18, or 'auto'"}
+    attributes: {label: Reference (template) night and camera, placeholder: "DAY-OBS 20260918, camera fa (1-m Sinistro)"}
   - type: textarea
     attributes: {label: Notes, description: "Comparison data, deadlines, anything special"}

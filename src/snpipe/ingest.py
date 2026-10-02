@@ -112,8 +112,9 @@ def add_target(name, ra, dec, conn=None):
     return tid
 
 
-def register(path, filetype=1, force=False, conn=None):
-    """``mysqldef.ingestredu`` for one unpacked frame: insert its photlco row."""
+def register(path, filetype=1, force=False, targetid=None, conn=None):
+    """``mysqldef.ingestredu`` for one unpacked frame: insert its photlco row. ``targetid`` (from a target file)
+    attaches the frame to that target whatever its OBJECT; otherwise the target is found as ``targimg`` does."""
     path = Path(path)
     if db.get_frame(path.name, conn) and not force:
         return False
@@ -128,7 +129,7 @@ def register(path, filetype=1, force=False, conn=None):
     row = {
         'dateobs': readkey(hdr, 'date-obs'), 'dayobs': readkey(hdr, 'DAY-OBS'), 'filename': path.name,
         'filepath': str(path.parent) + '/', 'filetype': int(filetype),
-        'targetid': find_or_create_target(hdr, conn), 'exptime': readkey(hdr, 'exptime'),
+        'targetid': targetid or find_or_create_target(hdr, conn), 'exptime': readkey(hdr, 'exptime'),
         'filter': readkey(hdr, 'filter'), 'mjd': readkey(hdr, 'mjd'), 'tracknumber': track,
         'telescope': tel, 'airmass': readkey(hdr, 'airmass'), 'objname': readkey(hdr, 'object'),
         'ut': readkey(hdr, 'ut'), 'wcs': readkey(hdr, 'wcserr'), 'instrument': hdr.get('INSTRUME'),
@@ -142,7 +143,7 @@ def register(path, filetype=1, force=False, conn=None):
     return True
 
 
-def run(frames, local_dir=None, nthreads=8, force=False):
+def run(frames, local_dir=None, nthreads=8, force=False, targetid=None):
     """Place all frames (download or copy) in parallel, then register them serially (one DB writer)."""
     def one(f):
         src = Path(local_dir) / f['filename'] if local_dir else None
@@ -151,5 +152,5 @@ def run(frames, local_dir=None, nthreads=8, force=False):
         return place_frame(f, src)
     with ThreadPoolExecutor(nthreads) as ex:
         paths = [p for p in ex.map(one, frames) if p is not None]
-    new = sum(register(p, force=force) for p in paths)
+    new = sum(register(p, force=force, targetid=targetid) for p in paths)
     return paths, new

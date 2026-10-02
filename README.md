@@ -1,49 +1,58 @@
-# snpipe — the LCOGT supernova pipeline, without IRAF
+# lcogtsnpipe-ai
 
-snpipe turns LCO images of a supernova into a calibrated light curve, the same way
-[lcogtsnpipe](https://github.com/LCOGT/lcogtsnpipe) does — in pure Python, faster, and with checks an AI agent can read.
+Light curves of transients from Las Cumbres Observatory images: the science of
+[lcogtsnpipe](https://github.com/LCOGT/lcogtsnpipe), without IRAF or MySQL, with every step checked and every choice
+written down. Part of **Transient SLOP** (Single-object Legacy Observation Products).
 
-![SN 2024pxl: old pipeline, snpipe and the published light curve](docs/report/visual/lightcurves_by_band_subset.png)
+![SN 2024pxl: the published light curve, the original pipeline and this one](docs/validation/sn2024pxl/visual/lightcurves_by_band_subset.png)
 
-*SN 2024pxl: the published light curve (grey), the original pipeline (open circles) and snpipe (filled squares) agree.*
+*SN 2024pxl: published light curve (grey), original pipeline (open circles), this pipeline (filled).
+[Validation](docs/validation/sn2024pxl/README.md).*
 
-## Why a new pipeline?
+## Quickstart
 
-lcogtsnpipe is well tested, but it depends on IRAF (no longer supported by NOAO and hard to install), needs a MySQL
-server, processes images one at a time, and needs a person at the screen to check each step. That makes it slow,
-hard to set up, and hard to hand to an AI agent. snpipe keeps the science and removes those obstacles.
+```bash
+pip install "lcogtsnpipe-ai[astra] @ git+https://github.com/yizedong/lcogtsnpipe-ai"
 
-![Time to reduce the same 99 frames: 8.1 h with the old pipeline, 2.5 h with snpipe](docs/report/visual/speed.png)
-
-*Same 99 frames, same computer: 8.1 h → 2.5 h. Vector version: [speed.pdf](docs/report/visual/speed.pdf).*
-
-## What you get
-
-- **Same results** as the original pipeline, checked step by step on real data.
-- **No IRAF**: installs with `pip`.
-- **Faster**: steps run in parallel.
-- **Agent-ready**: every step reports ok / warn / fail and shows pictures of anything doubtful.
-
-```mermaid
-flowchart LR
-  A[images] --> B[clean] --> C[measure stars] --> D[calibrate] --> E[light curve]
-  R[reference images] --> S[subtract] --> C
+# a folder of BANZAI frames (*-e91.fits.fz) with the archive's frames.json, or --frames archive (LCO_API_KEY)
+snpipe init-target ~/reductions/sn2025xyz --name 2025xyz --alias SN2025xyz --ra 123.456789 --dec -12.345678 \
+    --science 20250801-20251231 --templates 20260905 --camera fa --frames /data/raw/2025xyz
+snpipe run ~/reductions/sn2025xyz          # every step, checked; resumes if interrupted
 ```
 
-## Details
+The result is `results/baseline/` in the target's working directory: the light curves (with and without
+subtraction of a reference image), a report with every step's checks, and a review queue with a picture for every
+doubtful frame. Bands: B V g r i (U needs standard-star nights and is not supported yet).
 
-- **[Stage-by-stage visual report: old vs new, and how an agent checks each stage](docs/report/stages.md)** ([web version](https://yizedong.github.io/lcogtsnpipe-ai/stages.html) once GitHub Pages is on)
-- [Report: old vs new, numbers and figures](docs/report/README.md)
-- [How to install and run](docs/usage.md)
-- [How an agent runs and checks it](docs/agents.md)
-- [Where it differs from the old code](docs/decisions.md)
-- [Bugs fixed, and why](docs/bugs.md): every bug found (including ones inherited from the old pipeline), the fix and its effect ([web version](https://yizedong.github.io/lcogtsnpipe-ai/bugs.html))
+## How it is organised
+
+```
+pipeline/astra.yaml        the recipe: every step and every methodological choice, with its reason (ASTRA format)
+targets/<name>/            example objects: target.yaml (facts) + universes/ (choices)
+src/snpipe/                the code: one module per stage
+docs/                      guide, reference, validation
+tests/  tools/             tests; scripts that build the docs pages
+```
+
+The recipe is an [ASTRA](https://github.com/LightconeResearch/astra-spec) analysis, so the full reduction, with
+every decision and its options, is a document that people and agents can read, check (`astra validate`) and vary
+(universes), while `snpipe run` executes it.
+
+## Documentation
+
+| | |
+|---|---|
+| **Use it** | [install](docs/guide/install.md) · [targets](docs/guide/targets.md) · [running](docs/guide/running.md) · [outputs](docs/guide/outputs.md) · [checks](docs/guide/checks.md) · [review](docs/guide/review.md) |
+| **Hand it to an agent** | [runbook](docs/guide/agents.md) |
+| **Look things up** | [commands](docs/reference/cli.md) · [differences from lcogtsnpipe](docs/reference/compatibility.md) · [bugs fixed and open](docs/reference/bugs.md) |
+| **Trust it** | [SN 2024pxl: old vs new, stage by stage](docs/validation/sn2024pxl/README.md) |
 
 ## Contributing
 
-Anyone can open an issue; maintainers approve, an AI agent implements, maintainers review. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Anyone can open an issue; maintainers approve; an AI agent implements through pull requests; maintainers review.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits
 
-Built by **Claude (Anthropic, Claude Opus 5.5) in Claude Code**, directed and reviewed by Yize Dong.
-Based on lcogtsnpipe (S. Valenti et al.), PyZOGY (D. Guevel) and SLIDE (Y. Dong). MIT licence.
+Built by Claude (Anthropic, Claude Opus 5.5) in Claude Code, directed and reviewed by Yize Dong. Based on
+lcogtsnpipe (S. Valenti et al.), PyZOGY (D. Guevel) and SLIDE (Y. Dong). MIT licence.
