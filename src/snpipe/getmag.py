@@ -15,6 +15,25 @@ from . import db, sites
 COLS = {'mag': ('mag', 'dmag'), 'fit': ('psfmag', 'psfdmag'), 'ph': ('apmag', 'dapmag')}
 
 
+def flag_outliers(t, window=1.5, nsig=5., floor=0.1):
+    """Light-curve check (what a human does in getmag --show): flag a point that deviates from the median of the
+    other points of the same band within +-window days by more than max(nsig x their robust sigma, nsig x its
+    own error, floor). Returns 0/1 per row; flagged points stay in the table for review."""
+    flags = np.zeros(len(t), int)
+    for f in set(t['filter']):
+        idx = np.flatnonzero(np.asarray(t['filter']) == f)
+        jd, m, e = (np.asarray(t[c], float)[idx] for c in ('jd', 'mag', 'dmag'))
+        for k in range(len(idx)):
+            nb = (np.abs(jd - jd[k]) <= window) & (np.arange(len(idx)) != k)
+            if nb.sum() < 2:
+                continue
+            med = np.median(m[nb])
+            sig = 1.4826 * np.median(np.abs(m[nb] - med))
+            if abs(m[k] - med) > max(nsig * sig, nsig * e[k], floor):
+                flags[idx[k]] = 1
+    return flags
+
+
 def run(frames, mtype='mag', combine=1e-10, output=None, conn=None):
     mcol, ecol = COLS[mtype]
     rows = [db.get_frame(f, conn) for f in frames]
@@ -46,6 +65,7 @@ def run(frames, mtype='mag', combine=1e-10, output=None, conn=None):
                 i = j
         t = Table(rows=out, names=t.colnames)
     t.sort('jd')
+    t['flag'] = flag_outliers(t)
     t['jd'].format, t['mag'].format, t['dmag'].format = '%.5f', '%.4f', '%.4f'
     if output:
         t.write(output, format='csv', overwrite=True)

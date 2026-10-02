@@ -19,6 +19,7 @@ from astropy.visualization import ZScaleInterval  # noqa: E402
 from astropy.wcs import WCS  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parents[1] / 'src'))
 from compare import COLORS, FILT, paper_table  # noqa: E402
 
 plt.rcParams.update({'font.size': 9, 'axes.titlesize': 9})
@@ -228,6 +229,11 @@ def fig_lc(out, old, new, paper):
             if not pts:
                 continue
             p = np.array(pts)
+            from snpipe.getmag import flag_outliers
+            fl = flag_outliers(Table({'filter': [f] * len(p), 'jd': p[:, 0], 'mag': p[:, 1], 'dmag': p[:, 2]})).astype(bool)
+            if fl.any():
+                ax[0, k].plot(p[fl, 0] - 2460000, p[fl, 1], 'x', ms=7, color='k', label=f'{lab}: flagged' if k == 0 else None)
+            p = p[~fl]
             ax[0, k].errorbar(p[:, 0] - 2460000, p[:, 1], p[:, 2], fmt=mk, ms=4, color=COLORS[f], mfc=mfc or COLORS[f],
                               lw=0.8, label=lab)
             d = []
@@ -239,6 +245,9 @@ def fig_lc(out, old, new, paper):
                 d = np.array(d)
                 ax[1, k].errorbar(d[:, 0] - 2460000, d[:, 1], d[:, 2], fmt=mk, ms=4, color=COLORS[f], mfc=mfc or COLORS[f], lw=0.8)
         ax[0, k].invert_yaxis()
+        good = paper[paper['filter'] == f]['mag']
+        if len(good):
+            ax[0, k].set_ylim(max(good) + 0.6, min(good) - 0.6)
         ax[0, k].set_title(f)
         ax[1, k].axhline(0, color='k', lw=0.6)
         ax[1, k].set_ylim(-0.25, 0.25)
