@@ -54,6 +54,10 @@ def select_frames(args, conn=None):
     if getattr(args, 'frames_file', None):
         want = set(open(args.frames_file).read().split())
         rows = [r for r in rows if r['filename'] in want]
+    else:
+        # products of non-default diff options (.zp = --gain zeropoint, .cut = --region cutout) are tests: only
+        # selected when listed in --frames-file, so they never enter a default light curve twice
+        rows = [r for r in rows if not any(t in r['filename'] for t in ('.zp.diff', '.cut.diff', '.cut.zp.diff'))]
     return rows
 
 

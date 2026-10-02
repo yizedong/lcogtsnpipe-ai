@@ -100,10 +100,11 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
             register_method='adaptive', region='full', cutout_size=2048, gain='fit', conn=None):
     t0 = time.time()
     row = db.get_frame(frame, conn)
-    qa = FrameQA(frame, 'diff')
+    tag = ('.cut' if region == 'cutout' else '') + ('.zp' if gain == 'zeropoint' else '')
+    # a non-default variant keeps its own QA file (<frame>.diff.zp.qa.json), never the default's
+    qa = FrameQA(frame, 'diff' + tag)
     img = Path(row['filepath']) / frame
     temptel = temptel or row['instrument'][:2]
-    tag = ('.cut' if region == 'cutout' else '') + ('.zp' if gain == 'zeropoint' else '')
     suffix = f'.optimal.{temptel}{tag}.diff.fits'.replace('..', '.')
     out = Path(str(img).replace('.fits', suffix))
     if out.exists() and not force:

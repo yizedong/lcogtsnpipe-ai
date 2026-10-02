@@ -128,6 +128,26 @@ Each was found by comparing with IRAF on real frames, which is why the compariso
   rejecting points in `checkmag`. Subset: 5 points dropped. The 7 failing subset frames were added to the
   `--gain zeropoint` test.
 
+## 6c. `--gain zeropoint` test (flux scale from zero points instead of PyZOGY's iterative fit)
+
+27 subset frames, including the 7 whose iterative fit failed (`new_run/zp_test_results.json`):
+
+| | median | robust σ | max \|Δ\| | n |
+|---|---|---|---|---|
+| zero-point − iterative (calibrated mag) | +0.062 | 0.041 | 2.7 (failed frames) | 21 |
+| zero-point − old | +0.038 | 0.073 | 0.25 | 18 |
+| iterative − old | −0.002 | 0.031 | 0.19 | 18 |
+
+* Faster: the PyZOGY step drops from 91 s to 22 s per 1 m frame (50 → 7 s on 0.4 m); with registration
+  (~57 s) the whole subtraction goes from ~150 to ~80 s per 1 m frame.
+* Less accurate: SN magnitudes come out +0.04–0.06 mag fainter, up to +0.2 mag on 0.4 m g/r/i. The zero points
+  are measured on the unconvolved images with their own aperture corrections, so their ratio is not exactly
+  the flux ratio PyZOGY needs.
+* It fixes one failed frame (elp0m414-0153 B: noise ratio 64 → 1.1, mag 17.34). The lsc1m004 2024-07-27 frames
+  stay bad either way, so their problem is not the flux scale (also failed in the old pipeline).
+* Decision: keep the iterative fit (`diff_gain=fit`) as the default; `zeropoint` is an option for frames where
+  the fit fails.
+
 ## 7. Rejected option
 
 * PyZOGY on a 2048² cutout around the SN (4× cheaper): SN magnitudes moved by up to 0.2 mag vs full frame —

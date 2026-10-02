@@ -61,6 +61,7 @@ Every item says whether its numerical effect was measured.
 | option | result |
 |---|---|
 | PyZOGY on a 2048² cutout around the SN (4× cheaper) | SN difference mags moved by up to 0.2 mag vs full frame (PyZOGY's flux-scale/gain fit depends on the star set) → kept only as a non-default ASTRA option `diff_region=cutout`, documented as not equivalent |
+| `--gain zeropoint` (flux scale from zcat zero points, no iterative PyZOGY fit; 4× faster PyZOGY step) | SN mags +0.04–0.06 mag fainter than the iterative fit and the old pipeline (up to +0.2 on 0.4 m g/r/i), 27 subset frames → kept as non-default ASTRA option `diff_gain=zeropoint`, a fallback when the fit fails (fixed 1 of 7 failed frames) |
 
 ## Added (no old equivalent)
 * remediation ladder for failed PSFs (the manual's advice applied automatically; ASTRA decision `psf_auto_fix`)
