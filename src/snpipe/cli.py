@@ -50,7 +50,11 @@ def select_frames(args, conn=None):
     if getattr(args, 'bad', None) != 'quality':
         sql += 'AND p.quality=127 '
     sql += 'ORDER BY p.mjd'
-    return db.query(sql, params, conn)
+    rows = db.query(sql, params, conn)
+    if getattr(args, 'frames_file', None):
+        want = set(open(args.frames_file).read().split())
+        rows = [r for r in rows if r['filename'] in want]
+    return rows
 
 
 def _safe(fn, frame, stage, **kw):
@@ -192,6 +196,7 @@ def main(argv=None):
         a.add_argument('-d', '--id')
         a.add_argument('-b', '--bad')
         a.add_argument('--filetype', type=int, default=1)
+        a.add_argument('--frames-file', help='restrict to the frame names listed in this file')
         a.add_argument('-F', '--force', action='store_true')
         a.add_argument('-j', '--jobs', type=int, default=8)
         if stage == 'psf':
@@ -222,6 +227,8 @@ def main(argv=None):
             a.add_argument('--normalize', choices=['t', 'i'], default='t')
             a.add_argument('--unmask', action='store_true')
             a.add_argument('--register', default='adaptive', help='adaptive | exact | bilinear | bicubic')
+            a.add_argument('--region', choices=['full', 'cutout'], default='full')
+            a.add_argument('--cutout-size', type=int, default=2048)
         if stage in ('mag', 'getmag'):
             a.add_argument('--type', choices=['fit', 'ph', 'mag'], default=None)
             a.add_argument('--match-by-site', action='store_true')
@@ -316,7 +323,7 @@ def main(argv=None):
     if args.cmd == 'diff':
         return _run_stage('diff', frames, args.jobs, _diff, tempdate=args.tempdate, temptel=args.temptel,
                           normalize=args.normalize, unmask=args.unmask, force=args.force,
-                          register_method=args.register)
+                          register_method=args.register, region=args.region, cutout_size=args.cutout_size)
     if args.cmd == 'mag':
         from . import mag
         started = time.strftime('%Y-%m-%dT%H:%M:%S')

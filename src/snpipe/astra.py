@@ -72,8 +72,9 @@ def build(target, ra, dec, epoch, tempdate, raw_dir, template_dir, aliases=()):
     o('diff_qa', 'metric', 'json', 'PyZOGY difference images (template = earliest reference per filter)',
       ['psf_qa', 'template_qa'],
       f'snpipe diff {e} -j 4 --tempdate {tempdate} --temptel {{decisions.template_camera}} '
-      f'--normalize {{decisions.diff_normalize}} --register {{decisions.diff_register}} && {_qa("diff")}',
-      ['template_camera', 'diff_normalize', 'diff_register'])
+      f'--normalize {{decisions.diff_normalize}} --register {{decisions.diff_register}} '
+      f'--region {{decisions.diff_region}} && {_qa("diff")}',
+      ['template_camera', 'diff_normalize', 'diff_register', 'diff_region'])
     o('diff_phot_qa', 'metric', 'json', 'PSF of the difference images, target photometry on them',
       ['diff_qa'], f'snpipe psf {e} --filetype 3 -j 8 && snpipe psfmag {e} --filetype 3 -j 8 && {_qa("psfmag")}')
     o('diff_zcat_qa', 'metric', 'json', 'Zero points of the difference images (from the reference sn2)',
@@ -134,6 +135,12 @@ def build(target, ra, dec, epoch, tempdate, raw_dir, template_dir, aliases=()):
                               options={'adaptive': {'label': 'reproject_adaptive, flux conserving (closest to drizzle)'},
                                        'exact': {'label': 'reproject_exact (area overlap) x pixel-area ratio; slow'},
                                        'bilinear': {'label': 'reproject_interp bilinear x pixel-area ratio'}}),
+        'diff_region': dict(label='Area of the frame that is subtracted', default='full',
+                            rationale='The old pipeline subtracts the full frame (PyZOGY: ~6.9 GB and ~3 min per 4k '
+                                      'frame). A 2048x2048 cutout around the target is ~4x cheaper; the gain fit then '
+                                      'uses only the stars of that region.',
+                            options={'full': {'label': 'full frame (old pipeline)'},
+                                     'cutout': {'label': '2048x2048 px around the target'}}),
         'diff_phot_type': dict(label='Photometry on difference images', default='ph',
                                rationale='lscloop uses aperture photometry for difference images by default '
                                          '(the PyZOGY PSF is neither the science nor the reference PSF).',

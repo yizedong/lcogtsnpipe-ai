@@ -144,9 +144,11 @@ outputs:
   - template_camera
   - diff_normalize
   - diff_register
+  - diff_region
   recipe:
     command: snpipe diff -n 2024pxl -e 20240722-20241110 -j 4 --tempdate 20180306 --temptel {decisions.template_camera}
-      --normalize {decisions.diff_normalize} --register {decisions.diff_register} && cp qa/diff-latest.json {output}
+      --normalize {decisions.diff_normalize} --register {decisions.diff_register} --region {decisions.diff_region}
+      && cp qa/diff-latest.json {output}
 - id: diff_phot_qa
   type: metric
   format: json
@@ -281,14 +283,26 @@ decisions:
         label: science image
   diff_register:
     label: Resampling of the reference onto the science grid
-    default: exact
+    default: adaptive
     rationale: The old default was IRAF gregister drizzle (flux conserving); the manual warns the --no_iraf bilinear
       path may be worse.
     options:
+      adaptive:
+        label: reproject_adaptive, flux conserving (closest to drizzle)
       exact:
-        label: reproject_exact (area overlap) x pixel-area ratio
+        label: reproject_exact (area overlap) x pixel-area ratio; slow
       bilinear:
         label: reproject_interp bilinear x pixel-area ratio
+  diff_region:
+    label: Area of the frame that is subtracted
+    default: full
+    rationale: 'The old pipeline subtracts the full frame (PyZOGY: ~6.9 GB and ~3 min per 4k frame). A 2048x2048
+      cutout around the target is ~4x cheaper; the gain fit then uses only the stars of that region.'
+    options:
+      full:
+        label: full frame (old pipeline)
+      cutout:
+        label: 2048x2048 px around the target
   diff_phot_type:
     label: Photometry on difference images
     default: ph

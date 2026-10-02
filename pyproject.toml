@@ -21,7 +21,7 @@ dependencies = [
     "matplotlib",
     "requests",
     "pyyaml",
-    "PyZOGY",
+    "statsmodels",  # used by the bundled PyZOGY
 ]
 
 [project.optional-dependencies]

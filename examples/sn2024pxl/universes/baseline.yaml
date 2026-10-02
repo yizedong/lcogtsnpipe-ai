@@ -10,5 +10,6 @@ decisions:
   max_apercorr: apco_0p1
   template_camera: fl
   diff_normalize: t
-  diff_register: exact
+  diff_register: adaptive
+  diff_region: full
   diff_phot_type: ph

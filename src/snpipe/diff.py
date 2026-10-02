@@ -56,7 +56,7 @@ def fast_interpolate_bad_pixels(image, median_size=6, fname=''):
 
 
 def patch_pyzogy():
-    import PyZOGY.util as zu
+    from ._pyzogy import util as zu
     zu.interpolate_bad_pixels = fast_interpolate_bad_pixels
 
 
@@ -97,13 +97,13 @@ def find_template(row, tempdate, temptel, conn=None):
 
 
 def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unmask=False, force=False,
-            register_method='adaptive', conn=None):
+            register_method='adaptive', region='full', cutout_size=2048, conn=None):
     t0 = time.time()
     row = db.get_frame(frame, conn)
     qa = FrameQA(frame, 'diff')
     img = Path(row['filepath']) / frame
     temptel = temptel or row['instrument'][:2]
-    suffix = f'.optimal.{temptel}.diff.fits'.replace('..', '.')
+    suffix = f'.optimal.{temptel}{".cut" if region == "cutout" else ""}.diff.fits'.replace('..', '.')
     out = Path(str(img).replace('.fits', suffix))
     if out.exists() and not force:
         qa.status = 'skipped'
@@ -131,12 +131,31 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
         tdata, thdr = f[0].data.astype(float), f[0].header.copy()
     mask = fits.getdata(mask_f) > 0
     tmask = fits.getdata(tmask_f) > 0
+    if region == 'cutout':
+        # ASTRA decision diff_region=cutout: subtract a cutout_size^2 region around the target only
+        # (4x fewer pixels for 2048 on a 4k frame; the gain fit then uses the stars of that region)
+        from astropy.nddata import Cutout2D
+        t = db.target_info(row['targetid'], conn)
+        x0, y0 = WCS(hdr).wcs_world2pix([t['ra0']], [t['dec0']], 0)
+        if min(data.shape) > cutout_size:
+            c = Cutout2D(data, (float(x0[0]), float(y0[0])), cutout_size, wcs=WCS(hdr), mode='partial',
+                         fill_value=np.nan)
+            cm = Cutout2D(mask.astype('uint8'), (float(x0[0]), float(y0[0])), cutout_size, mode='partial',
+                          fill_value=1)
+            bad = ~np.isfinite(c.data)
+            data, mask = np.where(bad, 0., c.data), (cm.data > 0) | bad
+            h2 = hdr.copy()
+            for k in [k for k in h2 if k.startswith(('CRPIX', 'NAXIS', 'PC', 'CD', 'CRVAL', 'CTYPE', 'A_', 'B_'))]:
+                h2.remove(k, ignore_missing=True, remove_all=True)
+            h2.update(c.wcs.to_header())
+            h2['CUTOUT'] = (f'{c.origin_original[0]},{c.origin_original[1]}', 'x0,y0 (0-based) in the target frame')
+            hdr = h2
     sat_targ, sat_temp = float(readkey(hdr, 'datamax')), float(readkey(thdr, 'datamax'))
     t1 = time.time()
     rdata, rmask, foot = register(tdata, tmask, thdr, hdr, data.shape, register_method)
     t_reg = time.time() - t1
     patch_pyzogy()
-    from PyZOGY.subtract import run_subtraction
+    from ._pyzogy.subtract import run_subtraction
     scratch = os.getenv('SNPIPE_SCRATCH') or None  # fast local disk for the ~0.4 GB of per-frame scratch FITS
     with tempfile.TemporaryDirectory(dir=scratch, ignore_cleanup_errors=True) as tmp:  # per-frame, parallel-safe
         tmp = Path(tmp)
@@ -221,6 +240,7 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     qa.metrics.update(template=trow['filename'], register_seconds=round(t_reg, 1), zogy_seconds=round(t_zogy, 1),
                       diff_median=float(np.median(d[good])), diff_mad_sigma=float(sig),
                       masked_fraction=float(1 - good.mean()), unmask=unmask)
+    qa.metrics['region'] = region
     qa.check('masked_fraction', qa.metrics['masked_fraction'], hi=0.5, severity='warn')
     qa.outputs = [str(out), str(out).replace('.fits', '.zogypsf.fits')]
     qa.seconds = round(time.time() - t0, 2)

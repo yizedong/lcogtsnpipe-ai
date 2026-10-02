@@ -23,7 +23,9 @@ Every item says whether its numerical effect was measured.
 | PSF photometry | DAOPHOT `nstar` (fitsky=yes) | photutils PSFPhotometry + fitted constant sky | included above; fixed sky would give −0.020 / 0.025 |
 | psfmag background | IRAF imsurfit | astropy Legendre2D, same orders, full cross terms, same sections | — |
 | psfmag sky | apphot `mode` | port of apmode.x | — |
-| alignment for diff | IRAF geomap + gregister (drizzle, fluxconserve) | reproject_exact on the WCS × pixel-area ratio | — (WCS rms ≈0.25″ vs Gaia) |
+| alignment for diff | IRAF geomap + gregister (drizzle, fluxconserve) | reproject_adaptive(conserve_flux=True) on the WCS (reproject_exact took >25 min per 4k frame) | — |
+| diff masks | registered CR mask; outside the template footprint data=0, unmasked (IRAF path) | same (masking the footprint, as the old --no_iraf path does, makes PyZOGY's gain fit fail with NaNs) | — |
+| PyZOGY difference images (full frame) | lscdiff difftype 1 | same call, exact fast bad-pixel fill, parallel | SN aperture mag on the difference images, 92 frames: new−old median +0.005, robust σ 0.027 (1 m 0.016, 0.4 m 0.034; median error 0.037); 6540 s with 2 workers vs 17947 s serial |
 | Gaia catalog | ESA archive | ESA archive, VizieR copy of DR3 as fallback (same columns and cuts); ESA archive times out ahead of DR4 | identical source table |
 
 ## Speed changes that do not change numbers
@@ -54,6 +56,11 @@ Every item says whether its numerical effect was measured.
 | PSF stars are not checked against the BANZAI bad-pixel mask (a star on a flagged strip near the frame edge can be a PSF star; example lsc1m004-fa03-20240818-0142 star 16) | kept; same in IRAF |
 | pstselect accepts a PSF star with a fainter close companion | kept; caught by the review packet (example: elp1m008-fl05-20180306-0087, star 1) |
 | template = earliest reference frame per filter | kept |
+
+## Tried and rejected
+| option | result |
+|---|---|
+| PyZOGY on a 2048² cutout around the SN (4× cheaper) | SN difference mags moved by up to 0.2 mag vs full frame (PyZOGY's flux-scale/gain fit depends on the star set) → kept only as a non-default ASTRA option `diff_region=cutout`, documented as not equivalent |
 
 ## Added (no old equivalent)
 * remediation ladder for failed PSFs (the manual's advice applied automatically; ASTRA decision `psf_auto_fix`)
