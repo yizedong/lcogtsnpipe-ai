@@ -207,7 +207,7 @@
       "origin": "new",
       "stage": "review",
       "date": "2026-10-02",
-      "commit": "",
+      "commit": "0db02f3",
       "found_by": "cold-start handover test (fresh agent reading only the repo), verified",
       "title": "A 'delete' verdict on a difference image could delete the raw science frame",
       "where": "review.py verdict()",

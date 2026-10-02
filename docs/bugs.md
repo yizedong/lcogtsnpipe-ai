@@ -1,6 +1,6 @@
 # Bugs fixed, and why
 
-13 fixed (4 of them inherited from the old pipeline), 11 open, 2 checked and not bugs. Generated from [bugs.json](bugs.json) by `tools/bugs_page.py`; other deliberate differences from the old pipeline are in [decisions.md](decisions.md).
+14 fixed (4 of them inherited from the old pipeline), 11 open, 2 checked and not bugs. Generated from [bugs.json](bugs.json) by `tools/bugs_page.py`; other deliberate differences from the old pipeline are in [decisions.md](decisions.md).
 
 | id | status | origin | stage | bug |
 |---|---|---|---|---|
@@ -17,6 +17,7 @@
 | B11 | fixed | snpipe only | db | Worker processes reused the parent's SQLite connection |
 | B12 | fixed | snpipe only | wcs / all | One bad frame aborted the whole stage |
 | B13 | fixed | snpipe only | diff | Test variants of a difference image overwrote the default image's QA |
+| B14 | fixed | snpipe only | review | A 'delete' verdict on a difference image could delete the raw science frame |
 | O01 | open | also in the old pipeline | diff | Template PSF is not transformed to the science pixel grid |
 | O02 | open | snpipe only | psf | PSF-fit errors on difference images ignore the subtracted sky and reference noise |
 | O03 | open | snpipe only | psf | Grouped PSF fits have one sky per star instead of one per group |
@@ -156,6 +157,15 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Why it matters:** Light-curve filtering read the wrong verdict.
 - **Fix:** Variants keep their own QA file; default selection skips .zp/.cut products.
 - **Effect on SN 2024pxl:** 27 QA files overwritten, restored from the summaries.
+
+### B14 — A 'delete' verdict on a difference image could delete the raw science frame
+*review · snpipe only · 2026-10-02 · fix [`0db02f3`](https://github.com/yizedong/lcogtsnpipe-ai/commit/0db02f3) · found by: cold-start handover test (fresh agent reading only the repo), verified*
+
+- **Where:** review.py verdict()
+- **What was wrong:** The diff QA and review queue are keyed by the science frame name. 'snpipe verdict <science frame> diff delete' globbed '<science stem>*' and removed the raw science image, its star table, all its difference images, and its database row.
+- **Why it matters:** Irreversible loss of raw data and every product of that frame, triggered by the natural command an agent would type from the review queue.
+- **Fix:** Delete accepts only a .diff. file name (otherwise an error) and removes only files of that difference image.
+- **Effect on SN 2024pxl:** None: no delete verdict was ever given on 2024pxl. Tested on dummy files: the science frame is refused; deleting the diff keeps the science image and other variants.
 
 
 ## Open: verified, not fixed yet
