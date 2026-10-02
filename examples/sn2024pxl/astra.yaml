@@ -145,10 +145,11 @@ outputs:
   - diff_normalize
   - diff_register
   - diff_region
+  - diff_gain
   recipe:
     command: snpipe diff -n 2024pxl -e 20240722-20241110 -j 4 --tempdate 20180306 --temptel {decisions.template_camera}
       --normalize {decisions.diff_normalize} --register {decisions.diff_register} --region {decisions.diff_region}
-      && cp qa/diff-latest.json {output}
+      --gain {decisions.diff_gain} && cp qa/diff-latest.json {output}
 - id: diff_phot_qa
   type: metric
   format: json
@@ -303,6 +304,16 @@ decisions:
         label: full frame (old pipeline)
       cutout:
         label: 2048x2048 px around the target
+  diff_gain:
+    label: Flux ratio between science and reference in PyZOGY
+    default: fit
+    rationale: 'Old default: PyZOGY fits it iteratively from stars in common (5 iterations); it can instead be set
+      from the zcat zero points (SLIDE fast_mode idea).'
+    options:
+      fit:
+        label: PyZOGY iterative fit (old pipeline)
+      zeropoint:
+        label: from photometric zero points
   diff_phot_type:
     label: Photometry on difference images
     default: ph

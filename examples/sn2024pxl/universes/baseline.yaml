@@ -12,4 +12,5 @@ decisions:
   diff_normalize: t
   diff_register: adaptive
   diff_region: full
+  diff_gain: fit
   diff_phot_type: ph
