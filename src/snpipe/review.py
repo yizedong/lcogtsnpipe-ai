@@ -208,8 +208,12 @@ def verdict(frame, stage, v, reason, params=None, who='agent', conn=None):
     elif v == 'ulim':
         db.update(frame, conn, magtype=-1)
     elif v == 'delete' and stage == 'diff':
+        # only a difference-image product may be deleted. The diff QA/review queue is keyed by the science frame,
+        # and globbing '<science stem>*' removed the raw science image and all its products (bugs.md B14).
+        if '.diff.' not in frame:
+            raise ValueError(f'{frame} is not a difference image: give the .diff.fits name, not the science frame')
         p = Path(row['filepath']) / frame
-        for f in p.parent.glob(frame.replace('.fits', '') + '*'):
+        for f in p.parent.glob(frame[:-len('.fits')] + '.*'):
             f.unlink()
         with (conn or db.connect()):
             (conn or db.connect()).execute('DELETE FROM photlco WHERE filename=?', (frame,))

@@ -202,6 +202,21 @@
       "effect": "27 QA files overwritten, restored from the summaries."
     },
     {
+      "id": "B14",
+      "status": "fixed",
+      "origin": "new",
+      "stage": "review",
+      "date": "2026-10-02",
+      "commit": "",
+      "found_by": "cold-start handover test (fresh agent reading only the repo), verified",
+      "title": "A 'delete' verdict on a difference image could delete the raw science frame",
+      "where": "review.py verdict()",
+      "what": "The diff QA and review queue are keyed by the science frame name. 'snpipe verdict <science frame> diff delete' globbed '<science stem>*' and removed the raw science image, its star table, all its difference images, and its database row.",
+      "why": "Irreversible loss of raw data and every product of that frame, triggered by the natural command an agent would type from the review queue.",
+      "fix": "Delete accepts only a .diff. file name (otherwise an error) and removes only files of that difference image.",
+      "effect": "None: no delete verdict was ever given on 2024pxl. Tested on dummy files: the science frame is refused; deleting the diff keeps the science image and other variants."
+    },
+    {
       "id": "O01",
       "status": "open",
       "origin": "old",
