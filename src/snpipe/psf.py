@@ -41,7 +41,7 @@ LN2 = 0.6931472
 _PRF = None
 
 DEFAULTS = dict(fwhm=None, nstars=6, datamin=-100., datamax=None, max_apercorr=0.1, field='gaia',
-                use_sextractor=False, model='daophot', threshold=5.)
+                use_sextractor=False, model='daophot', threshold=5., time_budget=600.)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -419,17 +419,26 @@ def build_lut(data, fitted, sky, bx, by, psfrad, fitrad, datamax, sigma_ana, npi
             sub = np.where(good, sub - model, sub)
         resid_i /= (h * (1 / (bx * by)))
         wi = (h / h1) / (1 + (resid_i * sumfree / sigma_ana / 2) ** 2)
-        for (j, i_) in zip(*np.nonzero(incircle)):
-            X = x + (i_ + 1 - mid) / 2.
-            Y = y + (j + 1 - mid) / 2.
-            kx, ky = int(X - (x1 - 1)), int(Y - (y1 - 1))
-            if kx < 2 or kx + 2 > sub.shape[1] or ky < 2 or ky + 2 > sub.shape[0]:
-                continue
-            if np.any(~good[ky - 2:ky + 2, kx - 2:kx + 2]):
-                continue
-            val = _bicubic(sub, X - (x1 - 1), Y - (y1 - 1))
-            num[j, i_] += wi * (val - s) / (h / h1)
-            den[j, i_] += wi
+        # all table nodes at once (same arithmetic as the per-node loop of dp_ltinterp)
+        jn, in_ = np.nonzero(incircle)
+        X = x + (in_ + 1 - mid) / 2.
+        Y = y + (jn + 1 - mid) / 2.
+        Xs, Ys = X - (x1 - 1), Y - (y1 - 1)
+        kx, ky = Xs.astype(int), Ys.astype(int)
+        ok = (kx >= 2) & (kx + 2 <= sub.shape[1]) & (ky >= 2) & (ky + 2 <= sub.shape[0])
+        jn, in_, Xs, Ys, kx, ky = jn[ok], in_[ok], Xs[ok], Ys[ok], kx[ok], ky[ok]
+        off = np.arange(-2, 2)
+        rows = (ky[:, None] + off[None, :])                       # (n, 4) 0-based rows ky-2..ky+1
+        cols = (kx[:, None] + off[None, :])
+        block = sub[rows[:, :, None], cols[:, None, :]]           # (n, 4, 4)
+        gblock = good[rows[:, :, None], cols[:, None, :]]
+        use = gblock.all(axis=(1, 2))
+        dx, dy = (Xs - kx)[use], (Ys - ky)[use]
+        blk = block[use]
+        r = _catmull(np.moveaxis(blk, 2, 0), dx[:, None])        # along x for each of the 4 rows -> (n, 4)
+        val = _catmull(r.T, dy)                                    # then along y
+        np.add.at(num, (jn[use], in_[use]), wi * (val - s) / (h / h1))
+        np.add.at(den, (jn[use], in_[use]), wi)
     if np.any((den <= 0) & incircle):
         # DAOPHOT: "Too few stars to compute PSF lookup tables" -> fail
         raise RuntimeError('too few stars to compute the PSF lookup table')
@@ -770,7 +779,11 @@ def run_one(frame, conn=None, redo=False, auto_fix=True, **kw):
     best = None
     with fits.open(img) as f:
         hdr0 = f[0].header
+    budget = float(kw.get('time_budget', 600.))  # seconds per frame for the remediation ladder
     for label, o in ladder(row, opts) if auto_fix else [('default', opts)]:
+        if attempts and time.time() - t0 > budget:
+            attempts.append(dict(label=label, status='not tried', message=f'time budget {budget:.0f} s used'))
+            continue
         fw = o['fwhm']
         if isinstance(fw, tuple):
             fw = header_fwhm(hdr0, pixscale(hdr0)) * fw[1]
