@@ -38,6 +38,10 @@ flowchart LR
 - [How an agent runs and checks it](docs/agents.md)
 - [Where it differs from the old code](docs/decisions.md)
 
+## Contributing
+
+Anyone can open an issue; maintainers approve, an AI agent implements, maintainers review. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Credits
 
 Built by **Claude (Anthropic, Claude Opus 5.5) in Claude Code**, directed and reviewed by Yize Dong.

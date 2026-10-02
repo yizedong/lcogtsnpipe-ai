@@ -1,0 +1,11 @@
+name: Bug report
+description: Something in the pipeline is wrong (crash, wrong numbers, bad QA decision)
+labels: [bug, triage]
+body:
+  - type: textarea
+    attributes: {label: What happened, description: "Command, target, frames, error text or plot"}
+    validations: {required: true}
+  - type: textarea
+    attributes: {label: What you expected}
+  - type: input
+    attributes: {label: snpipe version / commit}

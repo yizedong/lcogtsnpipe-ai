@@ -1,0 +1,3 @@
+# GitHub usernames allowed to approve issues (label `approved`) and pull requests.
+# The agent acts only on issues labelled `approved` by someone in this list.
+yizedong

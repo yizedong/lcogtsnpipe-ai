@@ -1,0 +1,9 @@
+name: Feature or change
+description: Propose a new stage, option or change to the pipeline
+labels: [feature, triage]
+body:
+  - type: textarea
+    attributes: {label: What and why}
+    validations: {required: true}
+  - type: textarea
+    attributes: {label: How we will know it works, description: "Test data, comparison with the old pipeline or literature, tolerance"}
