@@ -286,6 +286,33 @@ def fig_timing(out, timing):
     plt.close(fig)
 
 
+def fig_speed(out, path):
+    """One picture of the speed-up: stacked time to reduce the same frames, old vs new."""
+    d = json.loads(Path(path).read_text())
+    st = d['stages']
+    cols = plt.cm.tab10(np.linspace(0, 1, 10))
+    fig, ax = plt.subplots(figsize=(9, 3.2))
+    for row, key in ((1, 'old'), (0, 'new')):
+        left = 0
+        for k, s in enumerate(st):
+            w = s[key] / 3600
+            hatch = '//' if key == 'new' and s.get('new_estimated') else None
+            ax.barh(row, w, left=left, color=cols[k], edgecolor='white', hatch=hatch,
+                    label=s['stage'] if key == 'old' else None)
+            left += w
+        ax.text(left + 0.1, row, f'{left:.1f} h', va='center', fontsize=10, fontweight='bold')
+    told = sum(s['old'] for s in st) / 3600
+    tnew = sum(s['new'] for s in st) / 3600
+    ax.set_yticks([1, 0], ['old pipeline\n(IRAF, serial)', 'snpipe\n(parallel)'])
+    ax.set_xlabel('hours to reduce the same 99 frames of SN 2024pxl')
+    ax.set_title(f'{told / tnew:.1f}× faster overall; image subtraction dominates both', fontsize=10)
+    ax.set_xlim(0, told * 1.15)
+    ax.legend(fontsize=7, ncol=4, loc='upper center', bbox_to_anchor=(0.5, -0.32), frameon=False)
+    fig.tight_layout()
+    fig.savefig(out / 'speed.png', dpi=110, bbox_inches='tight')
+    plt.close(fig)
+
+
 def main():
     ap = argparse.ArgumentParser()
     for k in ('--old-run', '--new-run', '--old-csv', '--paper', '--old-seepsf', '--timing', '--out'):
@@ -305,6 +332,9 @@ def main():
         fig_lc(out, old, new, paper_table(a.paper))
     if a.timing:
         fig_timing(out, json.loads(Path(a.timing).read_text()))
+        sub = Path(a.timing).with_name('timing_subset.json')
+        if sub.exists():
+            fig_speed(out, sub)
     print('figures in', out)
 
 

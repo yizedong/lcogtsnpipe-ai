@@ -7,6 +7,18 @@ snpipe turns LCO images of a supernova into a calibrated light curve, the same w
 
 *SN 2024pxl: the published light curve (grey), the original pipeline (open circles) and snpipe (filled squares) agree.*
 
+## Why a new pipeline?
+
+lcogtsnpipe is well tested, but it depends on IRAF (no longer supported by NOAO and hard to install), needs a MySQL
+server, processes images one at a time, and needs a person at the screen to check each step. That makes it slow,
+hard to set up, and hard to hand to an AI agent. snpipe keeps the science and removes those obstacles.
+
+![Time to reduce the same 99 frames: 8.1 h with the old pipeline, 2.5 h with snpipe](docs/report/visual/speed.png)
+
+*Same 99 frames, same computer: 8.1 h → 2.5 h. Hatched bars are estimated from per-frame times.*
+
+## What you get
+
 - **Same results** as the original pipeline, checked step by step on real data.
 - **No IRAF**: installs with `pip`.
 - **Faster**: steps run in parallel.

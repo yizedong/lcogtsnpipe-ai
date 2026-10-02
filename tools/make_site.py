@@ -42,7 +42,8 @@ stages = [
     ('zcat / mag on differences', 'Python', 'ported', f"z1 {ms('z1_ft3')}; <b>calibrated mag {ms('mag_ft3')}</b>", ''),
 ]
 stage_rows = ''.join(f'<tr><td>{a}</td><td>{b}</td><td>{c}</td><td>{d}</td><td>{e}</td></tr>' for a, b, c, d, e in stages)
-figs = [('visual/lightcurves_by_band_subset.png', 'Per band, subset epochs: Singh et al. (grey), old (open), new (filled), and residuals vs the paper'),
+figs = [('visual/speed.png', 'Time to reduce the same 99 frames: old pipeline vs snpipe (hatched: estimated from per-frame times)'),
+        ('visual/lightcurves_by_band_subset.png', 'Per band, subset epochs: Singh et al. (grey), old (open), new (filled), and residuals vs the paper'),
         ('visual/lightcurves_by_band.png', 'Per band, whole light curve'),
         ('visual/difference_images.png', 'Difference images around the SN: science, old, new, (new − old)/σ'),
         ('visual/sn_psf_fit_stamps.png', 'SN PSF-fit stamps of both pipelines (original and residual)'),
@@ -88,6 +89,7 @@ Code: <a href="https://github.com/yizedong/lcogtsnpipe-ai">github.com/yizedong/l
 <div class=card><b>2.7–11×</b>faster wall clock (parallel, no IRAF process per image)</div>
 <div class=card><b>pip install</b>no IRAF, no MySQL server, no HOTPANTS; PyZOGY bundled</div>
 </div>
+<h2>Why a new pipeline</h2><p>lcogtsnpipe depends on IRAF (no longer supported by NOAO, hard to install) and a MySQL server, reduces images one at a time, and needs a person to check each step. snpipe keeps the science, runs in pure Python, in parallel, and reports every check in machine-readable form.</p><figure><img src="report/visual/speed.png" alt="speed-up"><figcaption>Same 99 frames, same computer: 8.1 h → 2.5 h (hatched: estimated).</figcaption></figure>
 <h2>Stage by stage</h2><div class=wrap><table><tr><th>stage</th><th>old</th><th>new</th><th>new − old (median ± robust σ)</th><th>speed</th></tr>{stage_rows}</table></div>
 <p class=n>Frames reduced by only one pipeline: none only-old; 19 only-new in the unsubtracted PSF stage (old PSF failed; recovered by the remediation ladder).</p>
 <h2>Light curve vs Singh et al. (2026)</h2>

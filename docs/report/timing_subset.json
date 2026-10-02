@@ -1,0 +1,9 @@
+{"_note": "Seconds to reduce the same 99 frames (SN 2024pxl, 2024-07-22..28) on the same node. old: measured, serial (lcogtsnpipe + IRAF). new: measured stage wall clock, except where 'estimated' (per-frame time x frames / workers).",
+ "stages": [
+  {"stage": "cosmic", "old": 458, "new": 409, "new_estimated": false},
+  {"stage": "PSF model", "old": 3616, "new": 495, "new_estimated": true},
+  {"stage": "SN photometry", "old": 1968, "new": 142, "new_estimated": true},
+  {"stage": "zero points + mags", "old": 129, "new": 446, "new_estimated": false},
+  {"stage": "image subtraction", "old": 17947, "new": 6540, "new_estimated": false},
+  {"stage": "photometry on subtractions", "old": 4403, "new": 384, "new_estimated": false},
+  {"stage": "zero points + mags (subtractions)", "old": 612, "new": 514, "new_estimated": false}]}
