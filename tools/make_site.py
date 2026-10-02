@@ -42,7 +42,15 @@ stages = [
     ('zcat / mag on differences', 'Python', 'ported', f"z1 {ms('z1_ft3')}; <b>calibrated mag {ms('mag_ft3')}</b>", ''),
 ]
 stage_rows = ''.join(f'<tr><td>{a}</td><td>{b}</td><td>{c}</td><td>{d}</td><td>{e}</td></tr>' for a, b, c, d, e in stages)
-figs = [('lightcurve_vs_paper.png', 'Difference-imaging light curve: Singh et al. (2026), old and new pipelines'),
+figs = [('visual/lightcurves_by_band_subset.png', 'Per band, subset epochs: Singh et al. (grey), old (open), new (filled), and residuals vs the paper'),
+        ('visual/lightcurves_by_band.png', 'Per band, whole light curve'),
+        ('visual/difference_images.png', 'Difference images around the SN: science, old, new, (new − old)/σ'),
+        ('visual/sn_psf_fit_stamps.png', 'SN PSF-fit stamps of both pipelines (original and residual)'),
+        ('visual/psf_models.png', 'PSF models: IRAF seepsf of the old PSF vs the new model, difference and radial profiles'),
+        ('visual/one_to_one.png', 'New vs old, with residual panels'),
+        ('visual/pulls.png', '(new − old) / combined error'),
+        ('visual/timing.png', 'Seconds per frame, old vs new'),
+        ('lightcurve_vs_paper.png', 'Difference-imaging light curve: Singh et al. (2026), old and new pipelines'),
         ('mag_ft3.png', 'Calibrated SN magnitudes on difference images, new − old'),
         ('apmag_ft3.png', 'SN aperture magnitudes on difference images, new − old'),
         ('psf_stage.png', 'PSF stage: aperture correction and sn2 PSF magnitudes, new − old'),
@@ -95,6 +103,8 @@ snpipe gives each stage (1) gates with per-frame QA files and exit codes, (2) th
 <li>WCS-based registration leaves ~0.6 px offsets between the 2018 templates and 2024 frames; a star-based refinement (as IRAF geomap) is the next step for <code>diff</code>.</li>
 <li>PyZOGY's iterative flux-scale fit is sensitive to the star set (cutouts moved SN mags by up to 0.2 mag); a zero-point-based option is being tested.</li>
 <li>PSF stars are not checked against the BANZAI bad-pixel mask (neither pipeline).</li></ul>
+<h2>Credits</h2><p>Built by <b>Claude (Anthropic, Claude Opus 5.5) in Claude Code</b> — code, IRAF-source analysis, old-pipeline installation,
+validation and this report — directed and reviewed by Yize Dong. Based on lcogtsnpipe (S. Valenti et al., MIT), PyZOGY (D. Guevel, MIT) and the SLIDE PyZOGY speed-up idea (Y. Dong).</p>
 </main></body></html>"""
 (ROOT / 'docs' / 'index.html').write_text(html)
 print('wrote', ROOT / 'docs' / 'index.html')

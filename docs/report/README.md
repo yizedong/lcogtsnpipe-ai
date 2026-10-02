@@ -40,6 +40,18 @@ stage failed: 9 on the aperture-correction gate, 10 other errors; the remediatio
 Figures: `psf_stage.png`, `z1_ft1.png`, `psfmag_ft1.png`, `mag_ft1.png`, `z1_ft3.png`, `apmag_ft3.png`,
 `mag_ft3.png`, `lightcurve_vs_paper.png`.
 
+### Visual comparisons (`visual/`)
+
+* `visual/psf_models.png` — old PSF rendered by IRAF `seepsf` vs the new model, their difference (≤ 2 % of the
+  peak) and radial profiles, for a 1 m frame, a 0.4 m frame and a template.
+* `visual/difference_images.png` — science, old difference, new difference and (new − old)/σ around the SN.
+* `visual/sn_psf_fit_stamps.png` — the SN fit stamps (original / residual) of both pipelines.
+* `visual/one_to_one.png` — new vs old with residual panels: aperture correction, zero point, SN PSF mag,
+  calibrated mag (unsubtracted), SN aperture mag and calibrated mag on difference images.
+* `visual/pulls.png` — (new − old) / combined error.
+* `visual/lightcurves_by_band.png`, `visual/lightcurves_by_band_subset.png` — per band: paper, old, new, residuals.
+* `visual/timing.png` — seconds per frame, old vs new.
+
 ## 3. Wall-clock for the subset (99 frames)
 
 | stage | old (serial) | new |
@@ -119,3 +131,10 @@ Each was found by comparing with IRAF on real frames, which is why the compariso
 * PSF stars are not checked against the BANZAI bad-pixel mask (neither pipeline).
 * Not yet reduced: the remaining full-frame differences (resumable: `new_run/run_diff_priority.sh` without
   `--frames-file`), SNEx2 upload.
+
+## Credits
+
+This pipeline, the IRAF/DAOPHOT source analysis it is based on, the old-pipeline installation, the validation runs
+and this report were produced by **Claude (Anthropic, model Claude Opus 5.5) working in Claude Code**, directed and
+reviewed by Yize Dong. It builds on lcogtsnpipe (S. Valenti and contributors, MIT), PyZOGY (D. Guevel, MIT) and the
+SLIDE package's PyZOGY speed-up idea (Y. Dong, MIT).

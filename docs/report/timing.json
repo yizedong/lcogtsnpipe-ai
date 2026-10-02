@@ -1,0 +1,7 @@
+{"psf (science frames)": {"old": 79.0, "new": 15.0},
+ "psf (templates, 18 frames)": {"old": 93.9, "new": 8.4},
+ "psfmag (SN, unsubtracted)": {"old": 19.9, "new": 4.3},
+ "diff (PyZOGY, full frame)": {"old": 181.3, "new": 66.1},
+ "psf on difference images": {"old": 16.8, "new": 0.3},
+ "psfmag on difference images": {"old": 27.7, "new": 5.3},
+ "cosmic (both astroscrappy)": {"old": 4.6, "new": 4.1}}

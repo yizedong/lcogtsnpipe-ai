@@ -75,5 +75,7 @@ stage-by-stage comparison with the old pipeline on SN 2024pxl.
 
 ## Credits
 
-Derived from lcogtsnpipe (S. Valenti and contributors, MIT). The fast bad-pixel interpolation follows the
-SLIDE package (Y. Dong, MIT) and patches PyZOGY (D. Guevel, MIT).
+This pipeline, the IRAF/DAOPHOT source analysis it is based on, the old-pipeline installation, the validation runs
+and this report were produced by **Claude (Anthropic, model Claude Opus 5.5) working in Claude Code**, directed and
+reviewed by Yize Dong. It builds on lcogtsnpipe (S. Valenti and contributors, MIT), PyZOGY (D. Guevel, MIT) and the
+SLIDE package's PyZOGY speed-up idea (Y. Dong, MIT).
