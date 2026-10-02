@@ -53,15 +53,27 @@ def select_frames(args, conn=None):
     return db.query(sql, params, conn)
 
 
+def _safe(fn, frame, stage, **kw):
+    """One frame's failure must not stop the stage: exceptions become a 'fail' FrameQA."""
+    import traceback
+    try:
+        return fn(frame, **kw)
+    except Exception as e:
+        q = qa.FrameQA(frame, stage)
+        q.fail(f'{type(e).__name__}: {e}')
+        q.metrics['traceback'] = traceback.format_exc(limit=3)
+        return q
+
+
 def _run_stage(stage, frames, jobs, fn, **kw):
     started = time.strftime('%Y-%m-%dT%H:%M:%S')
     results = []
     if jobs > 1:
         with ProcessPoolExecutor(jobs) as ex:
-            futs = [ex.submit(fn, f, **kw) for f in frames]
+            futs = [ex.submit(_safe, fn, f, stage, **kw) for f in frames]
             results = [f.result() for f in futs]
     else:
-        results = [fn(f, **kw) for f in frames]
+        results = [_safe(fn, f, stage, **kw) for f in frames]
     for r, f in zip(results, frames):
         row = db.get_frame(f)
         if row:

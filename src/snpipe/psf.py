@@ -707,7 +707,9 @@ def run_one(frame, conn=None, redo=False, auto_fix=True, **kw):
     img = Path(row['filepath']) / frame
     qa = FrameQA(frame, 'psf')
     psfout = Path(str(img).replace('.fits', '.psf.fits'))
-    if psfout.exists() and not redo:
+    sn2out = Path(str(img).replace('.fits', '.sn2.fits'))
+    done = psfout.exists() and row['psf'] != 'X' and (sn2out.exists() or row['filetype'] == 3)
+    if done and not redo:  # complete products only (a run killed between the two writes is redone)
         qa.status = 'skipped'
         qa.messages.append('psf already calculated')
         return qa

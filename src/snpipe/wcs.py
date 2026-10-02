@@ -25,6 +25,7 @@ GATES = dict(min_matches=10, max_rms_arcsec=2.0, max_offset_arcsec=1.0)
 
 def detect(data, thresh=5., minarea=5):
     import sep
+    sep.set_extract_pixstack(10_000_000)
     d = np.ascontiguousarray(data, dtype=float)
     bkg = sep.Background(d)
     obj = sep.extract(d - bkg.back(), thresh, err=bkg.globalrms, minarea=minarea)
