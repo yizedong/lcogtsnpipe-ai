@@ -1,9 +1,49 @@
-{"_note": "Seconds to reduce the same 99 frames (SN 2024pxl, 2024-07-22..28) on the same node. old: measured, serial (lcogtsnpipe + IRAF). new: measured stage wall clock, except where 'estimated' (per-frame time x frames / workers).",
+{
+ "_note": "Seconds to reduce the same 99 frames (SN 2024pxl, 2024-07-22..28) on the same node. old: measured, serial (lcogtsnpipe + IRAF). new: measured stage wall clock, except where 'estimated' (per-frame time x frames / workers). Calibration (zero points + mags) re-timed on an isolated copy on 2026-10-02 while subtractions ran: both pipelines read every full image once for the limiting magnitude, so this stage is disk-bound and its old/new ratio reflects disk load at the time of each run, not the code.",
  "stages": [
-  {"stage": "cosmic", "old": 458, "new": 409, "new_estimated": false},
-  {"stage": "PSF model", "old": 3616, "new": 495, "new_estimated": true},
-  {"stage": "SN photometry", "old": 1968, "new": 142, "new_estimated": true},
-  {"stage": "zero points + mags", "old": 129, "new": 446, "new_estimated": false},
-  {"stage": "image subtraction", "old": 17947, "new": 6540, "new_estimated": false},
-  {"stage": "photometry on subtractions", "old": 4403, "new": 384, "new_estimated": false},
-  {"stage": "zero points + mags (subtractions)", "old": 612, "new": 514, "new_estimated": false}]}
+  {
+   "stage": "cosmic",
+   "old": 458,
+   "new": 409,
+   "new_estimated": false
+  },
+  {
+   "stage": "PSF model",
+   "old": 3616,
+   "new": 495,
+   "new_estimated": true
+  },
+  {
+   "stage": "SN photometry",
+   "old": 1968,
+   "new": 142,
+   "new_estimated": true
+  },
+  {
+   "stage": "zero points + mags",
+   "old": 129,
+   "new": 385,
+   "new_estimated": false,
+   "disk_bound": true
+  },
+  {
+   "stage": "image subtraction",
+   "old": 17947,
+   "new": 6540,
+   "new_estimated": false
+  },
+  {
+   "stage": "photometry on subtractions",
+   "old": 4403,
+   "new": 384,
+   "new_estimated": false
+  },
+  {
+   "stage": "zero points + mags (subtractions)",
+   "old": 612,
+   "new": 588,
+   "new_estimated": false,
+   "disk_bound": true
+  }
+ ]
+}

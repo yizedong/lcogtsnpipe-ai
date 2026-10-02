@@ -302,20 +302,22 @@ def fig_speed(out, path):
     told = np.array([s['old'] for s in st][::-1]) / 60
     tnew = np.array([s['new'] for s in st][::-1]) / 60
     est = [s.get('new_estimated') for s in st][::-1]
+    disk = [s.get('disk_bound') for s in st][::-1]
     h = 0.38
     a.barh(y + h / 2, told, h, color=c_old, label='lcogtsnpipe (IRAF, serial)')
     for k in range(len(y)):
         a.barh(y[k] - h / 2, tnew[k], h, color=c_new, hatch='////' if est[k] else None, edgecolor='white',
                lw=0, label='snpipe (parallel)' if k == 0 else None)
         f = told[k] / tnew[k]
-        a.text(max(told[k], tnew[k]) * 1.25, y[k], f'{f:.1f}×' if f >= 1 else f'{f:.1f}×*',
-               va='center', fontsize=9, fontweight='bold', color=c_new if f >= 1 else '#b05a00')
+        a.text(max(told[k], tnew[k]) * 1.25, y[k], 'disk-bound*' if disk[k] else f'{f:.1f}×',
+               va='center', fontsize=8 if disk[k] else 9, fontweight='normal' if disk[k] else 'bold',
+               color='#666' if disk[k] else c_new)
     a.set_xscale('log')
     a.set_xlim(1, told.max() * 6)
     a.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f'{v:g}'))
     a.set_yticks(y, names)
     a.set_xlabel(f'minutes for {nfr} frames (log scale)')
-    a.legend(loc='lower right', frameon=False, fontsize=8)
+    a.legend(loc="upper right", frameon=False, fontsize=8)
     a.set_title('(a) per stage', loc='left', fontsize=10)
     a.tick_params(axis='y', length=0)
     To, Tn = told.sum() / 60, tnew.sum() / 60
@@ -332,8 +334,9 @@ def fig_speed(out, path):
     b.set_ylim(0, To * 1.28)
     b.set_title('(b) end to end', loc='left', fontsize=10)
     fig.text(0.01, -0.04, f'Same {nfr} LCO frames of SN 2024pxl, same 8-core / 16 GB node. Hatched: new time '
-             'estimated from per-frame times. *Calibration was timed while two subtractions shared the node, plus'
-             '\n~27 s Python start-up per command; alone it takes 0.6-0.9 s per frame (old: 0.7 s).', fontsize=7, color='#444')
+             'estimated from per-frame times. *Both pipelines read every full image once for the limiting\nmagnitude; '
+             'this step is limited by the shared disk and its time depends on disk load during the run, not on the code.',
+             fontsize=7, color='#444')
     fig.tight_layout()
     for ext in ('png', 'pdf'):
         fig.savefig(out / f'speed.{ext}', dpi=200, bbox_inches='tight')
