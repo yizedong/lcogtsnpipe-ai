@@ -36,17 +36,9 @@ Every item says whether its numerical effect was measured.
 | frames in parallel, per-frame scratch directories | — |
 | one DB connection per process, parameterised SQL | — |
 
-## Bugs fixed (verified in the code; numerical effect noted)
-| bug | where | fix | effect on the 2024pxl light curve |
-|---|---|---|---|
-| `getmag --type ph` reports `psfdmag` as the error of the aperture magnitude | myloopdef.run_getmag | uses `dapmag` | errors only |
-| `getmag -o x.csv` writes a space-separated table | myloopdef.run_getmag | real CSV + ECSV | format only |
-| diff rows keep stale photometry columns of the target row | lscdiff.py | all photometry columns reset | none (columns are recomputed) |
-
-## Reported by the code survey but NOT bugs (checked)
-| claim | finding |
-|---|---|
-| zcat "module-global `keep`" | `global` inside an `if` applies to the whole function in Python: works as intended |
+## Bugs fixed
+Moved to **[bugs.md](bugs.md)** (generated from [bugs.json](bugs.json)): every bug found, fixed or open, including the
+ones inherited from the old pipeline, with the reason and the measured effect on SN 2024pxl.
 
 ## Behaviour kept although questionable (decide later; listed so it is not silent)
 | item | note |

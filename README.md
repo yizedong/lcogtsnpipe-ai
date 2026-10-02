@@ -37,6 +37,7 @@ flowchart LR
 - [How to install and run](docs/usage.md)
 - [How an agent runs and checks it](docs/agents.md)
 - [Where it differs from the old code](docs/decisions.md)
+- [Bugs fixed, and why](docs/bugs.md): every bug found (including ones inherited from the old pipeline), the fix and its effect ([web version](https://yizedong.github.io/lcogtsnpipe-ai/bugs.html))
 
 ## Contributing
 

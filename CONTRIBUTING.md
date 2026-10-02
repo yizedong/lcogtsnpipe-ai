@@ -25,6 +25,8 @@ An AI agent running on the group's server does most of the implementation and th
 * Destructive actions (deleting data, overwriting published reductions) need the label `approved-destructive`
   from a maintainer.
 * Every reduction records the code commit, the ASTRA decisions and the QA results.
+* Every bug fix adds or updates an entry in [docs/bugs.json](docs/bugs.json) (what was wrong, why it matters, the fix,
+  the measured effect, whether the old pipeline has it too) and reruns `python tools/bugs_page.py`.
 
 ## Labels
 
