@@ -124,11 +124,16 @@ def run(frames, typemag='fit', match_by_site=False, conn=None):
         elif r['mag'] >= 9999:
             q.fail('no magnitude (missing zero point, colour or instrumental mag)')
         elif '.diff.' in r['filename']:
-            # physical gate: the reference has no SN, so the difference cannot be brighter than the total
+            # physical gate: the transient's flux in the difference cannot exceed the total light (transient + host)
+            # in an aperture on the unsubtracted frame. That total is the unsubtracted calibrated magnitude moved from
+            # its PSF to its aperture magnitude (same zero point and colour); the PSF magnitude itself is no bound
+            # (on a bright host or a faded transient the PSF fit can fail, e.g. 2025rbs at +400 d: PSF-ap +4 mag)
             pair = db.query('SELECT namein FROM photpairing WHERE nameout=?', (r['filename'],), conn)
             src = db.get_frame(pair[0]['namein'], conn) if pair else None
-            if src and src['mag'] is not None and src['mag'] < 99:
-                q.metrics['mag_unsubtracted'] = float(src['mag'])
-                q.check('diff_minus_unsubtracted', float(r['mag'] - src['mag']), lo=-0.2)
+            if (src and src['mag'] is not None and src['mag'] < 99 and src['apmag'] is not None and src['apmag'] < 99
+                    and src['psfmag'] is not None and src['psfmag'] < 99):
+                total = float(src['mag'] + src['apmag'] - src['psfmag'])
+                q.metrics.update(mag_unsubtracted=float(src['mag']), mag_unsubtracted_aperture=total)
+                q.check('diff_minus_unsubtracted_aperture', float(r['mag'] - total), lo=-0.2)
         qas.append(q)
     return qas

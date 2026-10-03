@@ -29,7 +29,7 @@ Every stage checks every frame and writes `<frame>.<stage>.qa.json` next to the 
 | diff | flux ratio used vs the field-star ratio | ≤ 3 % | warn |
 | diff | masked fraction | ≤ 50 % | warn |
 | diff | reference of the frame's telescope class | exists | skipped ("no reference for this telescope class"), not an error |
-| mag | difference magnitude − unsubtracted magnitude | ≥ −0.2 | fail: the difference cannot be brighter than SN + host |
+| mag | difference magnitude − unsubtracted aperture magnitude (SN + host light) | ≥ −0.2 | fail: the difference cannot be brighter than all the light in the aperture |
 | getmag | point vs the median of its neighbours (±1.5 d, same band) | 5σ, ≥ 0.1 mag | flagged, kept (look at it) |
 
 Any metric that comes out undefined (NaN) fails its check.

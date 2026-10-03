@@ -322,8 +322,9 @@ def fig_mag(a, out, old, new):
     p = pairs(old, new, 'mag', 3, 'dmag', 10, 25)
     failed = {fn for fn, r in new.items() if r['filetype'] == 3 and qa_failed(r)}
     one_to_one(fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[1, 0]), p, 'SN calibrated mag (difference images)', failed)
-    recs = [r for r in qa_records(a.new_run, 'mag', True) if r['metrics'].get('diff_minus_unsubtracted') is not None]
-    v = np.array([r['metrics']['diff_minus_unsubtracted'] for r in recs])
+    key = lambda r: r['metrics'].get('diff_minus_unsubtracted_aperture', r['metrics'].get('diff_minus_unsubtracted'))
+    recs = [r for r in qa_records(a.new_run, 'mag', True) if key(r) is not None]
+    v = np.array([key(r) for r in recs])
     ax = fig.add_subplot(gs[:, 1])
     gate_hist(ax, np.clip(v, -1, 3), [(-0.2, 'fail: brighter than unsubtracted')],
               'difference mag − unsubtracted mag (clipped to [−1, 3])', f'agent check: {len(v)} frames, {int((v < -0.2).sum())} fail',

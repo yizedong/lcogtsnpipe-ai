@@ -1,6 +1,6 @@
 # Bugs fixed, and why
 
-31 fixed (5 of them inherited from the old pipeline), 12 open, 2 checked and not bugs. Generated from [bugs.json](bugs.json) by `tools/docs/bugs_page.py`; other deliberate differences from the old pipeline are in [compatibility.md](compatibility.md).
+32 fixed (5 of them inherited from the old pipeline), 12 open, 2 checked and not bugs. Generated from [bugs.json](bugs.json) by `tools/docs/bugs_page.py`; other deliberate differences from the old pipeline are in [compatibility.md](compatibility.md).
 
 | id | status | origin | stage | bug |
 |---|---|---|---|---|
@@ -34,6 +34,7 @@
 | B28 | fixed | snpipe only | diff | One unfillable masked cluster turned the whole difference image into NaN |
 | B29 | fixed | snpipe only | survey | PS1 reference saturation level was the image maximum |
 | B30 | fixed | snpipe only | diff | Frames in a filter the survey does not have were reported as failures |
+| B31 | fixed | snpipe only | mag | The "difference cannot be brighter than the total" check compared with the PSF magnitude |
 | O01 | fixed | also in the old pipeline | diff | Template PSF is not transformed to the science pixel grid |
 | O02 | open | snpipe only | psf | PSF-fit errors on difference images ignore the subtracted sky and reference noise |
 | O03 | open | snpipe only | psf | Grouped PSF fits have one sky per star instead of one per group |
@@ -337,6 +338,15 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Why it matters:** Misleading QA for agents.
 - **Fix:** Skipped with 'no reference in this filter' (counts as done, not as missing input).
 - **Effect on SN 2024pxl:** 99 frames of the 2025rbs PS1 test.
+
+### B31 — The "difference cannot be brighter than the total" check compared with the PSF magnitude
+*mag · snpipe only · 2026-10-03 · found by: SN 2025rbs gain comparison (frames where the subtraction looked brighter than the total)*
+
+- **Where:** mag.py
+- **What was wrong:** The bound used the unsubtracted PSF magnitude; on a bright host or a faded transient that fit fails (2025rbs at +400 d: PSF minus aperture +4 to +5.6 mag), so good subtractions failed the check.
+- **Why it matters:** Good points dropped from the light curve; misleading QA.
+- **Fix:** The bound is the total light in the aperture on the unsubtracted frame: its calibrated magnitude moved from the PSF to the aperture magnitude (same zero point and colour).
+- **Effect on SN 2024pxl:** 2025rbs 1 m (field-star gain): 13 of 232 subtracted points failed the old check, 0 the new one.
 
 
 ## Open: verified, not fixed yet

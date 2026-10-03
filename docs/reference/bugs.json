@@ -457,6 +457,21 @@
       "effect": "99 frames of the 2025rbs PS1 test."
     },
     {
+      "id": "B31",
+      "status": "fixed",
+      "origin": "new",
+      "stage": "mag",
+      "date": "2026-10-03",
+      "commit": "",
+      "found_by": "SN 2025rbs gain comparison (frames where the subtraction looked brighter than the total)",
+      "title": "The \"difference cannot be brighter than the total\" check compared with the PSF magnitude",
+      "where": "mag.py",
+      "what": "The bound used the unsubtracted PSF magnitude; on a bright host or a faded transient that fit fails (2025rbs at +400 d: PSF minus aperture +4 to +5.6 mag), so good subtractions failed the check.",
+      "why": "Good points dropped from the light curve; misleading QA.",
+      "fix": "The bound is the total light in the aperture on the unsubtracted frame: its calibrated magnitude moved from the PSF to the aperture magnitude (same zero point and colour).",
+      "effect": "2025rbs 1 m (field-star gain): 13 of 232 subtracted points failed the old check, 0 the new one."
+    },
+    {
       "id": "O01",
       "status": "fixed",
       "origin": "old",
