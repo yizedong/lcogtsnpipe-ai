@@ -12,7 +12,11 @@ disk, staging excluded. Raw: bench/results/timing_{old,new}_full.json.
 | psf (references, both passes) | 1,683 | 185 | 9x |
 | diff | 15,655 (1 m 10,062 + 0.4 m 5,593) | 6,458 (2 workers, memory bound) | 2.4x |
 | psf + psfmag on differences | 2,808 | 189 | 15x |
-| cosmic (science) | 508 (multicore 4) | 611 | 0.8x |
+| cosmic (science) | 508 (multicore 4) | 611 (-j 3) | 0.8x |
+
+Cosmic rays: per-frame times are the same in both (astroscrappy 1.2.0, identical call: median 27 s per 1-m frame,
+8.6 s per 0.4-m frame, from the logs; one frame re-timed in both environments: 25.6 s each). The old run used more
+processes (references: default `--multicore 8`; science: 4) than the new one (`-j 3`), so the stage took longer.
 
 Caveats: nodes not exclusive (other users' jobs recorded at start/end); the old job overlapped an old-pipeline
 smoke job (49939699) for ~20 min around 14:00-14:20; code before the 2026-10-02/03 fixes (O01 etc.); both
