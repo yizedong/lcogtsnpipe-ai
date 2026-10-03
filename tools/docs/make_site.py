@@ -42,7 +42,7 @@ stages = [
     ('zcat / mag on differences', 'Python', 'ported', f"z1 {ms('z1_ft3')}; <b>calibrated mag {ms('mag_ft3')}</b>", ''),
 ]
 stage_rows = ''.join(f'<tr><td>{a}</td><td>{b}</td><td>{c}</td><td>{d}</td><td>{e}</td></tr>' for a, b, c, d, e in stages)
-figs = [('visual/speed.png', 'Time to reduce the same 99 frames: old pipeline vs snpipe (hatched: estimated from per-frame times)'),
+figs = [('visual/speed_by_stage.png', 'Time per stage, same 100 + 18 frames and same hardware: old pipeline vs snpipe (measured)'),
         ('visual/lightcurves_by_band_subset.png', 'Per band, subset epochs: Singh et al. (grey), old (open), new (filled), and residuals vs the paper'),
         ('visual/lightcurves_by_band.png', 'Per band, whole light curve'),
         ('visual/difference_images.png', 'Difference images around the SN: science, old, new, (new − old)/σ'),
@@ -87,10 +87,10 @@ Code: <a href="https://github.com/yizedong/lcogtsnpipe-ai">github.com/yizedong/l
 <div class=cards>
 <div class=card><b>{f(S.get('mag_ft3', {}).get('median'))} ± {f(S.get('mag_ft3', {}).get('robust_sigma'), sign=False)}</b>calibrated SN mags on difference images, new − old (n={S.get('mag_ft3', {}).get('n', '—')})</div>
 <div class=card><b>bit-identical</b>cosmic-ray masks; aperture photometry identical to IRAF</div>
-<div class=card><b>2.7–11×</b>faster wall clock (parallel, no IRAF process per image)</div>
+<div class=card><b>2.9×</b>faster end to end, 7.2 h → 2.5 h on the same 8-core node (up to 20× per stage)</div>
 <div class=card><b>pip install</b>no IRAF, no MySQL server, no HOTPANTS; PyZOGY bundled</div>
 </div>
-<h2>Why a new pipeline</h2><p>lcogtsnpipe depends on IRAF (no longer supported by NOAO, hard to install) and a MySQL server, reduces images one at a time, and needs a person to check each step. snpipe keeps the science, runs in pure Python, in parallel, and reports every check in machine-readable form.</p><figure><img src="validation/sn2024pxl/visual/speed.png" alt="speed-up"><figcaption>Same 99 frames, same computer: 8.1 h → 2.5 h (hatched: estimated).</figcaption></figure>
+<h2>Why a new pipeline</h2><p>lcogtsnpipe depends on IRAF (no longer supported by NOAO, hard to install) and a MySQL server, reduces images one at a time, and needs a person to check each step. snpipe keeps the science, runs in pure Python, in parallel, and reports every check in machine-readable form.</p><figure><img src="validation/sn2024pxl/visual/speed_by_stage.png" alt="time per stage, old vs new"><figcaption>Same 100 science + 18 reference frames, same node type (8 cores, 16 GB), measured: 7.2 h → 2.5 h (2.9×). Cosmic rays are slower (same algorithm, bit-identical masks); subtraction is memory-bound (2 frames at a time). <a href="validation/sn2024pxl/benchmark/README.md">Benchmark</a>.</figcaption></figure>
 <h2>Stage by stage</h2><div class=wrap><table><tr><th>stage</th><th>old</th><th>new</th><th>new − old (median ± robust σ)</th><th>speed</th></tr>{stage_rows}</table></div>
 <p class=n>Frames reduced by only one pipeline: none only-old; 19 only-new in the unsubtracted PSF stage (old PSF failed; recovered by the remediation ladder).</p>
 <h2>Light curve vs Singh et al. (2026)</h2>

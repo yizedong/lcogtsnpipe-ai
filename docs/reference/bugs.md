@@ -441,7 +441,7 @@ Checked to be real; effect on SN 2024pxl given.
 - **Where:** docs/reference/compatibility.md, docs/report/README.md, README.md, docs/index.html, tools/compare.py, tools/stage_report.py
 - **What was wrong:** 'Identical' aperture photometry (9 of 1,230 stars differ by > 0.01 mag, chip edge); headline diff agreement includes a QA-failed -3.94 mag point; '8.1 h -> 2.5 h' is a sum of stage timings with 2 stages estimated; 'WCS checked for every frame' (only 18 templates); paper comparison not reproducible (45 vs 113 matches now); ladder recoveries 19 vs 21 and inferred.
 - **Why it matters:** Readers would trust numbers that are not what they say.
-- **Proposed fix:** Reword with the real statistics, save frame manifests, plot the exported light curve.
+- **Proposed fix:** Reword with the real statistics, save frame manifests, plot the exported light curve. Speed part done: the estimated 8.1 h -> 2.5 h is replaced by a measured benchmark (same 100 + 18 frames, same node type: 7.2 h -> 2.5 h, per stage in speed_by_stage.png); the other points remain.
 - **Effect on SN 2024pxl:** Documentation only.
 
 ### O12 — Cloudy frames are not flagged: no check on the zero point itself

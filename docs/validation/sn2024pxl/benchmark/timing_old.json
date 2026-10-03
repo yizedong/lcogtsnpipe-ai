@@ -1,0 +1,153 @@
+{
+ "pipeline": "old",
+ "set": "full",
+ "job_id": "49929684",
+ "cpu_model": "Intel(R) Xeon(R) Platinum 8268 CPU @ 2.90GHz",
+ "cpus_allocated": "8",
+ "mem_allocated_mb": "16384",
+ "n_science_frames": 100,
+ "n_template_frames": 18,
+ "data_disk": "node-local /scratch (data, DB, scratch, logs, caches); software read from lab storage",
+ "stage_in_seconds": 150.43,
+ "stage_out_seconds": 1.77,
+ "stages": [
+  {
+   "stage": "ingest (templates)",
+   "seconds": 24.51,
+   "n_frames": 18,
+   "exit": 0
+  },
+  {
+   "stage": "ingest (science)",
+   "seconds": 86.06,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "cosmic (templates)",
+   "seconds": 99.73,
+   "n_frames": 18,
+   "exit": 0
+  },
+  {
+   "stage": "psf (templates)",
+   "seconds": 850.43,
+   "n_frames": 18,
+   "exit": 0
+  },
+  {
+   "stage": "template",
+   "seconds": 93.71,
+   "n_frames": 18,
+   "exit": 0
+  },
+  {
+   "stage": "cosmic (templates ft4)",
+   "seconds": 94.79,
+   "n_frames": 18,
+   "exit": 0
+  },
+  {
+   "stage": "psf (templates ft4)",
+   "seconds": 832.99,
+   "n_frames": 18,
+   "exit": 0
+  },
+  {
+   "stage": "cosmic",
+   "seconds": 507.92,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "psf",
+   "seconds": 3469.07,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "psfmag",
+   "seconds": 1291.74,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "zcat apass",
+   "seconds": 20.02,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "zcat sloan",
+   "seconds": 58.85,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "mag",
+   "seconds": 23.15,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "diff (1m, fa)",
+   "seconds": 10061.58,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "diff (0.4m, sq)",
+   "seconds": 5592.92,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "psf (diff)",
+   "seconds": 1186.39,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "psfmag (diff)",
+   "seconds": 1621.2,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "zcat apass (diff)",
+   "seconds": 39.3,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "zcat sloan (diff)",
+   "seconds": 66.37,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "mag (diff)",
+   "seconds": 24.66,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "getmag (diff)",
+   "seconds": 9.29,
+   "n_frames": 100,
+   "exit": 0
+  },
+  {
+   "stage": "getmag (unsubtracted)",
+   "seconds": 9.08,
+   "n_frames": 100,
+   "exit": 0
+  }
+ ],
+ "node_shared": true,
+ "total_stage_seconds": 26063.8,
+ "n_other_jobs_on_node_at_start": 10,
+ "other_cpus_on_node_at_start": 30,
+ "n_other_jobs_on_node_at_end": 23,
+ "other_cpus_on_node_at_end": 34
+}

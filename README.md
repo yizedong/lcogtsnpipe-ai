@@ -9,6 +9,11 @@ written down. Part of **Transient SLOP** (Single-object Legacy Observation Produ
 *SN 2024pxl: published light curve (grey), original pipeline (open circles), this pipeline (filled).
 [Validation](docs/validation/sn2024pxl/README.md).*
 
+![Time per stage, old and new pipeline, same SN 2024pxl frames on the same hardware](docs/validation/sn2024pxl/visual/speed_by_stage.png)
+
+*Same 100 science + 18 reference frames, same node type (8 cores, 16 GB), run one after the other: 7.2 h → 2.5 h
+(2.9×). Measured, not estimated; data staging excluded. [Benchmark](docs/validation/sn2024pxl/benchmark/README.md).*
+
 ## Quickstart
 
 ```bash
