@@ -34,7 +34,7 @@ def apply_target(args):
     if part == 'reference':
         # every class's reference night, only that class's reference camera
         if getattr(args, 'epoch', 'x') is None and getattr(args, 'telescope', 'x') is None:
-            args.refsets = [(cls, r['dayobs'], r['camera']) for cls, r in t['reference'].items()]
+            args.refsets = [(cls, r['dayobs'], r['camera'], bool(r.get('survey'))) for cls, r in t['reference'].items()]
     elif getattr(args, 'epoch', 'x') is None:
         args.epoch = t['science']['dayobs']
     if args.cmd == 'diff' and getattr(args, 'tempdate', None) in (None, '') and not getattr(args, 'temptel', ''):
@@ -60,7 +60,11 @@ def select_frames(args, conn=None):
         params += [e[0], e[-1]]
     if getattr(args, 'refsets', None):
         ors = []
-        for cls, rng, cam in args.refsets:
+        for cls, rng, cam, survey in args.refsets:
+            if survey:                        # survey references: <survey>-<target>-<band>.fits, any class
+                ors.append('(p.filename LIKE ?)')
+                params.append(f'{cam}-%')
+                continue
             e = rng.split('-')
             ors.append('(p.dayobs>=? AND p.dayobs<=? AND substr(p.filename, 4, 3)=? AND p.filename LIKE ?)')
             params += [e[0], e[-1], cls, f'%-{cam}%']

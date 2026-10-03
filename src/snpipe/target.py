@@ -40,7 +40,9 @@ import yaml
 SCHEMA_VERSION = 1
 KEYS = {'schema_version', 'name', 'aliases', 'ra', 'dec', 'coordinates', 'workdir', 'science', 'reference',
         'templates', 'resources'}
-PART_KEYS = {'science': {'dayobs', 'frames'}, 'reference': {'dayobs', 'camera', 'frames'}}
+PART_KEYS = {'science': {'dayobs', 'frames'}, 'reference': {'dayobs', 'camera', 'frames', 'survey'}}
+SURVEYS = ('ps1',)
+SURVEY_DAYOBS = '20000101-20991231'   # a survey reference matches any date
 CLASSES = ('1m0', '0m4', '2m0')
 CAMERA_CLASS = {'fa': '1m0', 'fl': '1m0', 'sq': '0m4', 'ep': '2m0', 'fs': '2m0', 'em': '2m0'}
 
@@ -120,6 +122,8 @@ def load(path):
     ref = t.get('reference')
     if ref:
         ref = dict(ref)
+        if 'survey' in ref and not set(ref) - {'survey'}:
+            raise TargetError(f'{path}: a survey reference needs its class, e.g. reference: {{1m0: {{survey: ps1}}}}')
         if set(ref) & PART_KEYS['reference']:          # a single reference: its camera decides the class
             cls = CAMERA_CLASS.get(str(ref.get('camera', '')))
             if cls is None:
@@ -132,6 +136,11 @@ def load(path):
             r = dict(r or {})
             where = f'{path}: reference.{cls}'
             _unknown(where, r, PART_KEYS['reference'])
+            if r.get('survey'):
+                if r['survey'] not in SURVEYS or set(r) - {'survey'}:
+                    raise TargetError(f"{where}: survey must be one of {SURVEYS}, alone (got {r})")
+                ref[cls] = {'survey': r['survey'], 'camera': r['survey'], 'dayobs': SURVEY_DAYOBS, 'frames': None}
+                continue
             r['dayobs'] = _dayobs(where, r.get('dayobs'))
             if not r.get('camera'):
                 raise TargetError(f'{where}.camera (e.g. fa, fl, sq) is required')
@@ -189,6 +198,8 @@ def frames_for(t, part):
             raise TargetError(f"{t['file']}: no reference section")
         frames, local = [], None
         for cls, r in t['reference'].items():
+            if r.get('survey'):
+                continue                      # made by snpipe.survey, not ingested from frames
             fr, local = _frames(t, r)
             frames += [f for f in fr if frame_class(f['filename']) == cls and r['camera'] in f['filename']]
         return frames, local

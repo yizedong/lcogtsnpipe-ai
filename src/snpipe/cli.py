@@ -288,10 +288,17 @@ def cmd_ingest(args):
         tid = db.target_by_name(t['name'])
         if tid is None:
             raise TargetError(f"target {t['name']} is not in the database: run add-target first")
+        res = {'part': args.frames}
+        if args.frames == 'reference':
+            res['survey'] = survey_references(t, tid, args)
         frames, local = target.frames_for(t, args.frames)
         frames = [f for f in frames if keep(f)]
         paths, new = ingest.run(frames, local, args.jobs, targetid=tid)
-        res = {'part': args.frames, 'dayobs': t[args.frames]['dayobs']}
+        if args.frames == 'science':
+            res['dayobs'] = t['science']['dayobs']
+        elif not frames and res['survey']:
+            report_result({**res, 'frames': 0, 'placed': 0, 'new_rows': 0, 'missing': []}, args.qa_out)
+            return qa.EXIT['external'] if any('error' in v for v in res['survey'].values()) else qa.EXIT['ok']
     else:
         if not args.target:
             raise TargetError('give --target or --target-file')
@@ -305,6 +312,41 @@ def cmd_ingest(args):
     missing = sorted(f['filename'] for f in frames if f['filename'].replace('.fz', '') not in placed)
     report_result({**res, 'frames': len(frames), 'placed': len(paths), 'new_rows': new, 'missing': missing}, args.qa_out)
     return qa.EXIT['ok'] if frames and not missing else qa.EXIT['missing_input']
+
+
+def survey_references(t, tid, args):
+    """Build the survey reference images (one per filter with science frames of a class whose reference is a
+    survey) and register them as reference images (filetype 4). Returns {filter: metrics or error}."""
+    from . import config, ingest, survey
+    from .target import frame_class
+    classes = {c for c, r in (t['reference'] or {}).items() if r.get('survey')}
+    if not classes:
+        return {}
+    rows = [r for r in db.query('SELECT filename, filepath, filter FROM photlco WHERE targetid=? AND filetype=1 '
+                                'AND quality=127', (tid,)) if frame_class(r['filename']) in classes]
+    out = {}
+    if not rows:
+        return {'all': {'error': 'no science frames of the classes with a survey reference: ingest science first'}}
+    sample = [Path(r['filepath']) / r['filename'] for r in rows[::max(1, len(rows) // 20)]]
+    size = min(survey.field_size(sample, float(t['ra']), float(t['dec'])), survey.MAX_SIZE_ARCSEC)
+    for filt in sorted({r['filter'] for r in rows}):
+        try:
+            band = survey.ps1_band(filt)
+        except survey.SurveyError as e:
+            out[filt] = {'skipped': str(e)}
+            continue
+        name = f"ps1-{t['name']}-{band}.fits"
+        path = config.workdir() / 'data' / 'ps1' / name
+        if path.exists() and not getattr(args, 'force', False) and db.get_frame(name):
+            out[filt] = {'exists': str(path)}
+            continue
+        try:
+            m = survey.ps1_reference(float(t['ra']), float(t['dec']), size, filt, path, t['name'])
+            ingest.register(path, filetype=4, force=True, targetid=tid)
+            out[filt] = m
+        except Exception as e:
+            out[filt] = {'error': f'{type(e).__name__}: {e}'}
+    return out
 
 
 def cmd_catalogs(args):
@@ -328,6 +370,11 @@ def cmd_stage(args):
     if args.cmd == 'diff' and args.tempdate is None and getattr(args, 'references', None) is None:
         raise TargetError('diff needs --tempdate/--temptel (or a --target-file with a reference section)')
     frames = [r['filename'] for r in select_frames(args)]
+    if not frames and args.frames == 'reference' and args.filetype == 1 and getattr(args, 'refsets', None) \
+            and all(s[3] for s in args.refsets):
+        report_result({'stage': args.cmd, 'status': 'ok', 'n_frames': 0,
+                       'message': 'nothing to do: survey references are made directly as reference images'}, args.qa_out)
+        return qa.EXIT['ok']
     if not frames:
         report_result({'stage': args.cmd, 'status': 'skipped', 'n_frames': 0,
                        'message': 'no frames selected (check -n/-e/--filetype, or run the earlier stages)'}, args.qa_out)

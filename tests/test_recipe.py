@@ -200,3 +200,16 @@ def test_cross_class_differences_are_not_selected_by_default():
     assert not cross_class('cpt1m010-fa14-20250715-0303-e91.optimal.fa.diff.fits')    # 1 m minus 1 m
     assert not cross_class('elp1m008-fa16-20240907-0115-e91.optimal.fl.diff.fits')    # fa science, fl reference: both 1 m
     assert not cross_class('cpt1m010-fa14-20250715-0303-e91.fits')                    # not a difference image
+
+
+def test_survey_reference(tmp_path):
+    from snpipe import survey
+    t = target.load(make_target(tmp_path / 'a', reference={'1m0': {'survey': 'ps1'},
+                                                           '0m4': {'dayobs': '20990601', 'camera': 'sq'}}))
+    assert t['reference']['1m0']['survey'] == 'ps1' and t['reference']['1m0']['camera'] == 'ps1'
+    for bad in ({'1m0': {'survey': 'des'}}, {'1m0': {'survey': 'ps1', 'dayobs': '20990601'}}, {'survey': 'ps1'}):
+        with pytest.raises(target.TargetError):
+            target.load(make_target(tmp_path / str(len(str(bad))), reference=bad))
+    assert survey.ps1_band('rp') == 'r'
+    with pytest.raises(survey.SurveyError):
+        survey.ps1_band('B')                     # PS1 has no B, V, U
