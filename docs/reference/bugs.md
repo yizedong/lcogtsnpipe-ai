@@ -303,7 +303,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** Stopped the 2025rbs finishing run once.
 
 ### B27 — Reference saturation not scaled by the registration's pixel-area ratio
-*diff · snpipe only · 2026-10-03 · found by: SN 2025rbs PS1-reference test run*
+*diff · snpipe only · 2026-10-03 · fix [`e2086d6`](https://github.com/yizedong/lcogtsnpipe-ai/commit/e2086d6) · found by: SN 2025rbs PS1-reference test run*
 
 - **Where:** diff.py
 - **What was wrong:** Flux-conserving registration multiplies the reference's pixel values by the pixel-area ratio (x2.4 for a 0.25"/px PS1 reference on 0.39"/px science) but PyZOGY got the unscaled saturation level: 132,452 pixels of a PS1 i reference were masked as saturated.
@@ -312,7 +312,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** Every PS1 r/i subtraction of the first 2025rbs test failed; none for LCO 1-m references (ratio ~1).
 
 ### B28 — One unfillable masked cluster turned the whole difference image into NaN
-*diff · snpipe only · 2026-10-03 · found by: SN 2025rbs PS1-reference test run*
+*diff · snpipe only · 2026-10-03 · fix [`e2086d6`](https://github.com/yizedong/lcogtsnpipe-ai/commit/e2086d6) · found by: SN 2025rbs PS1-reference test run*
 
 - **Where:** diff.fast_interpolate_bad_pixels
 - **What was wrong:** PyZOGY's bad-pixel interpolation (49x49 Gaussian) leaves clusters wider than the kernel as NaN, and one NaN makes the FFT-based difference NaN everywhere (the original PyZOGY behaves the same).
@@ -321,7 +321,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** As B27.
 
 ### B29 — PS1 reference saturation level was the image maximum
-*survey · snpipe only · 2026-10-03 · found by: SN 2025rbs PS1-reference test run*
+*survey · snpipe only · 2026-10-03 · fix [`e2086d6`](https://github.com/yizedong/lcogtsnpipe-ai/commit/e2086d6) · found by: SN 2025rbs PS1-reference test run*
 
 - **Where:** survey.py
 - **What was wrong:** SATURATE = 1.01 x the brightest pixel; the psf stage then picked saturated stars (aperture correction 0.83 mag off for r, rescued only by the ladder's 'datamax below the brightest star').
@@ -330,7 +330,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** 2025rbs PS1 test.
 
 ### B30 — Frames in a filter the survey does not have were reported as failures
-*diff · snpipe only · 2026-10-03 · found by: SN 2025rbs PS1-reference test run*
+*diff · snpipe only · 2026-10-03 · fix [`e2086d6`](https://github.com/yizedong/lcogtsnpipe-ai/commit/e2086d6) · found by: SN 2025rbs PS1-reference test run*
 
 - **Where:** diff.py, qa.py
 - **What was wrong:** B, V, U frames of a class with a PS1 reference ended as 'template not found' (fail).
