@@ -38,18 +38,22 @@ def image_table(frames, magcol, errcol, conn=None):
     # extinction must use the airmass and site of the image whose stars gave the zero point (the sn2 header
     # zcat read). For a difference image normalized to the template (PHOTNORM=t) that is the template, not
     # the science frame whose row the diff copied (old pipeline bug: error k_t*X_t - k_s*X_s, up to 0.15 mag).
-    ext_site, ext_airmass = [], []
+    ext_site, ext_airmass, ext_ok = [], [], []
     for r in rows:
-        site, am = r['filename'][:3], r['airmass']
+        site, am, ok = r['filename'][:3], r['airmass'], True
         sn2 = str(r['filepath']) + '/' + r['filename'].replace('.fits', '.sn2.fits')
         try:
             h = fits.getheader(sn2)
             site, am = h['SITEID'], float(readkey(h, 'airmass'))
         except (OSError, KeyError, TypeError, ValueError):
-            pass
-        ext_site.append(site)
+            # a science frame's own row has the same values; a difference image does not (its zero point belongs
+            # to the image it is normalised to): without that header its magnitude cannot be calibrated
+            ok = '.diff.' not in r['filename']
+        ext_site.append(site if site in sites.extinction else r['filename'][:3])
         ext_airmass.append(am)
-    t['ext_site'], t['ext_airmass'] = ext_site, ext_airmass
+        ext_ok.append(ok)
+    t['ext_site'], t['ext_airmass'], t['ext_ok'] = ext_site, ext_airmass, ext_ok
+    t[magcol].mask |= ~np.asarray(ext_ok)
     t['filter'] = [sites.filterst1[f] for f in t['filter']]
     t.rename_column(magcol, 'instmag')
     t.rename_column(errcol, 'dinstmag')
@@ -114,7 +118,10 @@ def run(frames, typemag='fit', match_by_site=False, conn=None):
         db.update(r['filename'], conn, mag=float(r['mag']), dmag=float(r['dmag']))
         q = FrameQA(r['filename'], 'mag', metrics=dict(mag=float(r['mag']), dmag=float(r['dmag']),
                                                        filter=r['filter'], zcol=zcol[len(qas)], typemag=typemag))
-        if r['mag'] >= 9999:
+        if not r['ext_ok']:
+            q.fail('star table (sn2) of the difference image missing or unreadable: airmass/site of its zero-point '
+                   'image unknown (rerun diff)')
+        elif r['mag'] >= 9999:
             q.fail('no magnitude (missing zero point, colour or instrumental mag)')
         elif '.diff.' in r['filename']:
             # physical gate: the reference has no SN, so the difference cannot be brighter than the total

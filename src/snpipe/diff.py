@@ -134,6 +134,42 @@ def star_flux_ratio(sci_sn2, ref_sn2, t_sci, t_ref, radius=1.0, max_err=0.03):
     return float(t_sci / t_ref * 10 ** (-0.4 * np.median(dm))), int(ok.sum())
 
 
+def field_star_residual(diff_path, max_err=0.02, nmax=300):
+    """Field-star cancellation: the flux left at bright unsaturated stars of the difference image's star table
+    (aperture 3 x FWHM, local background from an annulus) divided by their flux in that table (magp3, same
+    aperture, the image the difference is normalised to). Median over stars = fractional flux-scale error of the
+    subtraction (0 = field stars cancel). Returns {residual, scatter, n} or None (fewer than 5 stars)."""
+    from photutils.aperture import CircularAnnulus, CircularAperture, ApertureStats, aperture_photometry
+    d, h = fits.getdata(diff_path).astype(float), fits.getheader(diff_path)
+    sn2 = str(diff_path).replace('.fits', '.sn2.fits')
+    with fits.open(sn2) as s:
+        t, sh = s[1].data, s[0].header
+    m, e = np.asarray(t['magp3'], float), np.asarray(t['merrp3'], float)
+    ok = np.isfinite(m) & np.isfinite(e) & (m < 90) & (e < max_err)
+    if ok.sum() < 5:
+        return None
+    idx = np.argsort(m[ok])[:nmax]
+    ra, dec = np.asarray(t['ra0'], float)[ok][idx], np.asarray(t['dec0'], float)[ok][idx]
+    flux_ref = 10 ** (-0.4 * m[ok][idx]) * float(sh.get('EXPTIME', 1.))
+    w = WCS(h)
+    x, y = w.world_to_pixel_values(ra, dec)
+    from .psf import pixscale
+    fwhm_px = float(sh.get('PSF_FWHM') or 1.5) / pixscale(h)
+    r = 3 * fwhm_px
+    inside = (x > 2 * r) & (y > 2 * r) & (x < d.shape[1] - 2 * r) & (y < d.shape[0] - 2 * r)
+    if inside.sum() < 5:
+        return None
+    pos = np.c_[x[inside], y[inside]]
+    ap, an = CircularAperture(pos, r), CircularAnnulus(pos, r + 2, r + 2 + 2 * fwhm_px)
+    bkg = ApertureStats(np.nan_to_num(d), an).median
+    s = aperture_photometry(np.nan_to_num(d), ap)['aperture_sum'] - bkg * ap.area
+    frac = np.asarray(s) / flux_ref[inside]
+    frac = frac[np.isfinite(frac)]
+    med = float(np.median(frac))
+    return dict(residual=med, scatter=float(1.4826 * np.median(np.abs(frac - med))), n=int(len(frac)))
+
+
+
 def find_template(row, tempdate, temptel, conn=None):
     d1, d2 = tempdate.split('-')[0], tempdate.split('-')[-1]
     f1 = sites.filterst1.get(row['filter'])
@@ -365,7 +401,9 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     qa.metrics['noise_ratio_diff_to_ref'] = float(sig / sig_ref) if sig_ref else None
     qa.metrics['noise_expected'] = float(expected) if np.isfinite(expected) else None
     qa.metrics['noise_ratio_to_expected'] = float(sig / expected) if np.isfinite(expected) and expected else None
-    if qa.metrics['noise_ratio_to_expected'] is not None:
+    if qa.metrics['noise_ratio_to_expected'] is None:
+        qa.warn('noise check not evaluated: no flux ratio known (no zero points, too few field stars)')
+    else:
         qa.check('noise_ratio_to_expected', qa.metrics['noise_ratio_to_expected'], hi=3., severity='fail')
         if qa.status == 'ok' and qa.metrics['noise_ratio_to_expected'] > 1.5:
             qa.warn('difference noise > 1.5x the noise expected from science and reference')
@@ -374,6 +412,18 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
                       masked_fraction=float(1 - good.mean()), unmask=unmask)
     qa.metrics['region'], qa.metrics['gain'] = region, gain
     qa.check('masked_fraction', qa.metrics['masked_fraction'], hi=0.5, severity='warn')
+    # field stars must cancel: the fraction of their flux left is the flux-scale error of this subtraction
+    try:
+        fs = field_star_residual(out)
+    except Exception as e:
+        fs = None
+        qa.messages.append(f'field-star cancellation not measured: {type(e).__name__}: {e}')
+    if fs:
+        qa.metrics.update(field_star_residual=fs['residual'], field_star_residual_scatter=fs['scatter'],
+                          field_star_n=fs['n'])
+        qa.check('field_star_residual_abs', abs(fs['residual']), hi=0.10, severity='fail')
+        if qa.status == 'ok' and abs(fs['residual']) > 0.03:
+            qa.warn(f"field stars leave {fs['residual']:+.1%} of their flux: flux ratio or registration off")
     qa.outputs = [str(out), str(out).replace('.fits', '.zogypsf.fits')]
     qa.seconds = round(time.time() - t0, 2)
     return qa

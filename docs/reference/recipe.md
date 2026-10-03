@@ -25,12 +25,12 @@ Generated from [pipeline/astra.yaml](../../pipeline/astra.yaml) by `python tools
 | `zcat_reference_bv` | zcat | psf_reference, catalogs | bv_catalog | Zero points of the B and V reference images (difference images normalised to the reference use them). |
 | `zcat_reference_gri` | zcat | psf_reference, catalogs | gri_catalog | Zero points of the g, r and i reference images. |
 | `diff_science` | diff | psf_science, zcat_science_bv, zcat_science_gri, psf_reference, zcat_reference_bv, zcat_reference_gri | diff_reference_class, diff_normalize, diff_register, diff_region, diff_gain | PyZOGY difference images, science minus the reference of the same telescope class (earliest reference frame per filter); frames of a class without a reference are not subtracted. |
-| `psf_difference` | psf | diff_science |  | PSF of every difference image (needed by the transient photometry on it). |
-| `psfmag_difference` | psfmag | psf_difference | diff_bkg_order | Photometry of the transient on the difference images. |
-| `zcat_difference_bv` | zcat | psfmag_difference | bv_catalog, diff_phot_type | Zero points of the B and V difference images (from the star table of the image they are normalised to). |
-| `zcat_difference_gri` | zcat | psfmag_difference | gri_catalog, diff_phot_type | Zero points of the g, r and i difference images. |
-| `mag_difference` | mag | zcat_difference_bv, zcat_difference_gri, mag_science | diff_phot_type | Calibrated magnitudes of the transient on the difference images (checked against the unsubtracted ones). |
-| `lc_subtracted` | getmag | mag_difference |  | Template-subtracted light curve (the main product), same columns as lc_unsubtracted, plus .ecsv. |
+| `psf_difference` | psf | diff_science | diff_gain, diff_region, diff_reference_class | PSF of every difference image (needed by the transient photometry on it). |
+| `psfmag_difference` | psfmag | psf_difference | diff_bkg_order, diff_gain, diff_region, diff_reference_class | Photometry of the transient on the difference images. |
+| `zcat_difference_bv` | zcat | psfmag_difference | bv_catalog, diff_phot_type, diff_gain, diff_region, diff_reference_class | Zero points of the B and V difference images (from the star table of the image they are normalised to). |
+| `zcat_difference_gri` | zcat | psfmag_difference | gri_catalog, diff_phot_type, diff_gain, diff_region, diff_reference_class | Zero points of the g, r and i difference images. |
+| `mag_difference` | mag | zcat_difference_bv, zcat_difference_gri, mag_science | diff_phot_type, diff_gain, diff_region, diff_reference_class | Calibrated magnitudes of the transient on the difference images (checked against the unsubtracted ones). |
+| `lc_subtracted` | getmag | mag_difference | diff_gain, diff_region, diff_reference_class | Template-subtracted light curve (the main product), same columns as lc_unsubtracted, plus .ecsv. |
 | `review_queue` | review-all | lc_subtracted, lc_unsubtracted |  | Frames to look at: every warn/fail plus a random sample of ok frames, with PNG review packets, for an agent or a person to give verdicts (snpipe verdict). Replaces the old interactive check* steps. |
 | `report` | report | lc_subtracted, lc_unsubtracted, review_queue |  | The standard report of the reduction: target and choices, per-step quality summary, frames left out and why, light-curve plots and tables, provenance (code version, universe). Written as report.md with figures next to it. |
 

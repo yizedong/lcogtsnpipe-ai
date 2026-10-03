@@ -5,9 +5,6 @@ stage default applies.
 """
 from . import db, qa, sites
 
-# products of non-default diff options (.fit = --gain fit, .cut = --region cutout; .zp = zero-point gain when it
-# was still a test option) are variants: selected only when listed in --frames-file, never twice in a light curve
-TEST_PRODUCTS = ('.fit.diff', '.zp.diff', '.cut.diff', '.cut.zp.diff', '.cut.fit.diff')
 
 
 def cross_class(filename):
@@ -91,5 +88,16 @@ def select_frames(args, conn=None):
     if getattr(args, 'frames_file', None):
         want = set(open(args.frames_file).read().split())
         return [r for r in rows if r['filename'] in want]
-    # test variants and cross-class difference images only when listed explicitly (--frames-file)
-    return [r for r in rows if not any(t in r['filename'] for t in TEST_PRODUCTS) and not cross_class(r['filename'])]
+    return [r for r in rows if keep_frame(r['filename'], getattr(args, 'diff_variant', None))]
+
+
+def keep_frame(name, diff_variant=None):
+    """A difference image is selected when its variant tag (.cut = region cutout, .fit = PyZOGY gain fit; .zp = an
+    old test) is the run's choice (--diff-variant gain:region:reference_class, passed by the recipe from the
+    universe) and, unless the choice allows it, its reference is of the frame's own telescope class."""
+    if '.diff.' not in name:
+        return True
+    gain, region, refclass = (diff_variant or 'zeropoint:full:same').split(':')
+    want = ('.cut' if region == 'cutout' else '') + ('.fit' if gain == 'fit' else '')
+    tag = ''.join(t for t in ('.cut', '.fit', '.zp') if t + '.' in name)
+    return tag == want and (refclass == 'any' or not cross_class(name))

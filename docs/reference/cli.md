@@ -9,7 +9,7 @@ Generated from the code by `python tools/docs/cli_page.py`. Exit codes of every 
 run the whole recipe (pipeline/astra.yaml) for a target folder
 
 ```
-snpipe run [-h] [--universe UNIVERSE] [--from STEP] [--only STEP] [--dry-run] [--keep-going] [--recipe RECIPE] [--sbatch] target_dir
+snpipe run [-h] [--universe UNIVERSE] [--from STEP] [--only STEP] [--dry-run] [--keep-going] [--recipe RECIPE] [--sbatch] [--force] target_dir
 
 positional arguments:
   target_dir           folder with target.yaml and universes/
@@ -23,6 +23,7 @@ options:
   --keep-going         after a stopped step, still run independent steps
   --recipe RECIPE      another astra.yaml (default: the packaged pipeline/astra.yaml)
   --sbatch             print a SLURM job script for this run instead
+  --force              every step that runs redoes its cached per-frame products
 ```
 
 ### snpipe status
@@ -171,7 +172,7 @@ check the astrometry of each frame against Gaia; re-fit when it fails
 
 ```
 snpipe wcs [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE] [-d ID]
-                  [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT]
+                  [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [--diff-variant GAIN:REGION:REFCLASS] [-F] [-j JOBS] [--qa-out QA_OUT]
 
 options:
   -h, --help            show this help message and exit
@@ -196,6 +197,8 @@ frame selection:
   --filetype FILETYPE   1 science, 3 difference, 4 reference
   --frames-file FRAMES_FILE
                         only the frame names listed in this file
+  --diff-variant GAIN:REGION:REFCLASS
+                        difference images of these choices (default zeropoint:full:same); set by the recipe
 ```
 
 ### snpipe cosmic
@@ -204,7 +207,8 @@ find and clean cosmic rays
 
 ```
 snpipe cosmic [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE]
-                     [-d ID] [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT]
+                     [-d ID] [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [--diff-variant GAIN:REGION:REFCLASS] [-F] [-j JOBS]
+                     [--qa-out QA_OUT]
 
 options:
   -h, --help            show this help message and exit
@@ -229,6 +233,8 @@ frame selection:
   --filetype FILETYPE   1 science, 3 difference, 4 reference
   --frames-file FRAMES_FILE
                         only the frame names listed in this file
+  --diff-variant GAIN:REGION:REFCLASS
+                        difference images of these choices (default zeropoint:full:same); set by the recipe
 ```
 
 ### snpipe psf
@@ -237,9 +243,9 @@ PSF model, aperture correction and star photometry of each frame
 
 ```
 snpipe psf [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE] [-d ID]
-                  [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT] [--fwhm FWHM] [--nstars NSTARS]
-                  [--datamax DATAMAX] [--datamin DATAMIN] [--max-apercorr MAX_APERCORR] [--field FIELD] [--model {daophot,epsf}]
-                  [--auto-fix {ladder,off}]
+                  [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [--diff-variant GAIN:REGION:REFCLASS] [-F] [-j JOBS] [--qa-out QA_OUT]
+                  [--fwhm FWHM] [--nstars NSTARS] [--datamax DATAMAX] [--datamin DATAMIN] [--max-apercorr MAX_APERCORR] [--field FIELD]
+                  [--model {daophot,epsf}] [--auto-fix {ladder,off}]
 
 options:
   -h, --help            show this help message and exit
@@ -274,6 +280,8 @@ frame selection:
   --filetype FILETYPE   1 science, 3 difference, 4 reference
   --frames-file FRAMES_FILE
                         only the frame names listed in this file
+  --diff-variant GAIN:REGION:REFCLASS
+                        difference images of these choices (default zeropoint:full:same); set by the recipe
 ```
 
 ### snpipe psfmag
@@ -282,8 +290,8 @@ photometry of the transient (PSF fit and aperture)
 
 ```
 snpipe psfmag [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE]
-                     [-d ID] [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT] [-x XORD] [-y YORD]
-                     [--bkg BKG] [--size SIZE] [-c] [--datamax DATAMAX] [--datamin DATAMIN] [--RA RA] [--DEC DEC]
+                     [-d ID] [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [--diff-variant GAIN:REGION:REFCLASS] [-F] [-j JOBS]
+                     [--qa-out QA_OUT] [-x XORD] [-y YORD] [--bkg BKG] [--size SIZE] [-c] [--datamax DATAMAX] [--datamin DATAMIN] [--RA RA] [--DEC DEC]
 
 options:
   -h, --help            show this help message and exit
@@ -317,6 +325,8 @@ frame selection:
   --filetype FILETYPE   1 science, 3 difference, 4 reference
   --frames-file FRAMES_FILE
                         only the frame names listed in this file
+  --diff-variant GAIN:REGION:REFCLASS
+                        difference images of these choices (default zeropoint:full:same); set by the recipe
 ```
 
 ### snpipe zcat
@@ -325,8 +335,8 @@ fit zero points and colour terms against a field catalog
 
 ```
 snpipe zcat [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE] [-d ID]
-                   [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT] [--field FIELD] [--catalogue CATALOGUE]
-                   [--unfix] [--type {fit,ph}] [--sigma-clip SIGMA_CLIP] [--match-by-site]
+                   [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [--diff-variant GAIN:REGION:REFCLASS] [-F] [-j JOBS] [--qa-out QA_OUT]
+                   [--field FIELD] [--catalogue CATALOGUE] [--unfix] [--type {fit,ph}] [--sigma-clip SIGMA_CLIP] [--match-by-site]
 
 options:
   -h, --help            show this help message and exit
@@ -357,6 +367,8 @@ frame selection:
   --filetype FILETYPE   1 science, 3 difference, 4 reference
   --frames-file FRAMES_FILE
                         only the frame names listed in this file
+  --diff-variant GAIN:REGION:REFCLASS
+                        difference images of these choices (default zeropoint:full:same); set by the recipe
 ```
 
 ### snpipe template
@@ -365,7 +377,8 @@ mark frames of the reference night as reference images (filetype 4)
 
 ```
 snpipe template [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE]
-                       [-d ID] [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT]
+                       [-d ID] [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [--diff-variant GAIN:REGION:REFCLASS] [-F] [-j JOBS]
+                       [--qa-out QA_OUT]
 
 options:
   -h, --help            show this help message and exit
@@ -390,6 +403,8 @@ frame selection:
   --filetype FILETYPE   1 science, 3 difference, 4 reference
   --frames-file FRAMES_FILE
                         only the frame names listed in this file
+  --diff-variant GAIN:REGION:REFCLASS
+                        difference images of these choices (default zeropoint:full:same); set by the recipe
 ```
 
 ### snpipe diff
@@ -398,9 +413,9 @@ difference images: science minus reference (PyZOGY)
 
 ```
 snpipe diff [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE] [-d ID]
-                   [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT] [--tempdate TEMPDATE]
-                   [--temptel TEMPTEL] [--normalize {t,i}] [--unmask] [--register REGISTER] [--region {full,cutout}] [--gain {zeropoint,fit}]
-                   [--cutout-size CUTOUT_SIZE] [--reference-class {same,any}]
+                   [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [--diff-variant GAIN:REGION:REFCLASS] [-F] [-j JOBS] [--qa-out QA_OUT]
+                   [--tempdate TEMPDATE] [--temptel TEMPTEL] [--normalize {t,i}] [--unmask] [--register REGISTER] [--region {full,cutout}]
+                   [--gain {zeropoint,fit}] [--cutout-size CUTOUT_SIZE] [--reference-class {same,any}]
 
 options:
   -h, --help            show this help message and exit
@@ -437,6 +452,8 @@ frame selection:
   --filetype FILETYPE   1 science, 3 difference, 4 reference
   --frames-file FRAMES_FILE
                         only the frame names listed in this file
+  --diff-variant GAIN:REGION:REFCLASS
+                        difference images of these choices (default zeropoint:full:same); set by the recipe
 ```
 
 ### snpipe mag
@@ -445,8 +462,8 @@ calibrated magnitudes of the transient
 
 ```
 snpipe mag [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE] [-d ID]
-                  [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT] [--type {fit,ph,mag}] [--match-by-site]
-                  [-o OUTPUT] [--combine COMBINE]
+                  [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [--diff-variant GAIN:REGION:REFCLASS] [-F] [-j JOBS] [--qa-out QA_OUT]
+                  [--type {fit,ph,mag}] [--match-by-site] [-o OUTPUT] [--combine COMBINE]
 
 options:
   -h, --help            show this help message and exit
@@ -476,6 +493,8 @@ frame selection:
   --filetype FILETYPE   1 science, 3 difference, 4 reference
   --frames-file FRAMES_FILE
                         only the frame names listed in this file
+  --diff-variant GAIN:REGION:REFCLASS
+                        difference images of these choices (default zeropoint:full:same); set by the recipe
 ```
 
 ### snpipe getmag
@@ -484,8 +503,8 @@ export the light curve (CSV + ECSV)
 
 ```
 snpipe getmag [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE]
-                     [-d ID] [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT] [--type {fit,ph,mag}]
-                     [--match-by-site] [-o OUTPUT] [--combine COMBINE] [--keep-failed]
+                     [-d ID] [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [--diff-variant GAIN:REGION:REFCLASS] [-F] [-j JOBS]
+                     [--qa-out QA_OUT] [--type {fit,ph,mag}] [--match-by-site] [-o OUTPUT] [--combine COMBINE] [--keep-failed]
 
 options:
   -h, --help            show this help message and exit
@@ -516,6 +535,8 @@ frame selection:
   --filetype FILETYPE   1 science, 3 difference, 4 reference
   --frames-file FRAMES_FILE
                         only the frame names listed in this file
+  --diff-variant GAIN:REGION:REFCLASS
+                        difference images of these choices (default zeropoint:full:same); set by the recipe
 ```
 
 ## Review

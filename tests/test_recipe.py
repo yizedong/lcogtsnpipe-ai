@@ -222,3 +222,15 @@ def test_exit_code_missing_only_when_nothing_could_run():
     assert qa.exit_code(s(0, 749, 3)) == qa.EXIT['ok']               # 746 already done, 3 without psf
     assert qa.exit_code(s(0, 5, 5)) == qa.EXIT['missing_input']      # nothing could run
     assert qa.exit_code(s(2, 3, 3)) == qa.EXIT['ok']
+
+
+def test_diff_variant_selection():
+    import argparse
+    from snpipe import selection
+    names = ['cpt1m010-fa14-20250715-0303-e91.optimal.fa.diff.fits', 'cpt1m010-fa14-20250715-0303-e91.optimal.fa.fit.diff.fits',
+             'cpt1m010-fa14-20250715-0303-e91.optimal.fa.zp.diff.fits', 'tfn0m419-sq32-20250720-0152-e91.optimal.fa.diff.fits']
+    rows = [{'filename': n} for n in names]
+    pick = lambda v: [r['filename'] for r in rows if selection.keep_frame(r['filename'], v)]
+    assert pick(None) == names[:1]                              # default: zero-point gain, full frame, same class
+    assert pick('fit:full:same') == names[1:2]
+    assert pick('zeropoint:full:any') == [names[0], names[3]]

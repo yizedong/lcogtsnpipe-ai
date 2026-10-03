@@ -201,53 +201,55 @@ outputs:
   format: json
   description: PSF of every difference image (needed by the transient photometry on it).
   inputs: [target, diff_science]
+  decisions: [diff_gain, diff_region, diff_reference_class]
   recipe:
-    command: snpipe psf --target-file {inputs.target} --filetype 3 --qa-out {output}
+    command: snpipe psf --target-file {inputs.target} --filetype 3 --diff-variant {decisions.diff_gain}:{decisions.diff_region}:{decisions.diff_reference_class} --qa-out {output}
 - id: psfmag_difference
   type: metric
   format: json
   description: Photometry of the transient on the difference images.
   inputs: [target, psf_difference]
-  decisions: [diff_bkg_order]
+  decisions: [diff_bkg_order, diff_gain, diff_region, diff_reference_class]
   recipe:
     command: >-
       snpipe psfmag --target-file {inputs.target} --filetype 3 -x {decisions.diff_bkg_order}
-      -y {decisions.diff_bkg_order} --qa-out {output}
+      -y {decisions.diff_bkg_order} --diff-variant {decisions.diff_gain}:{decisions.diff_region}:{decisions.diff_reference_class} --qa-out {output}
 - id: zcat_difference_bv
   type: metric
   format: json
   description: Zero points of the B and V difference images (from the star table of the image they are normalised to).
   inputs: [target, psfmag_difference]
-  decisions: [bv_catalog, diff_phot_type]
+  decisions: [bv_catalog, diff_phot_type, diff_gain, diff_region, diff_reference_class]
   recipe:
     command: >-
       snpipe zcat --target-file {inputs.target} --filetype 3 -f landolt --field {decisions.bv_catalog}
-      --type {decisions.diff_phot_type} --qa-out {output}
+      --type {decisions.diff_phot_type} --diff-variant {decisions.diff_gain}:{decisions.diff_region}:{decisions.diff_reference_class} --qa-out {output}
 - id: zcat_difference_gri
   type: metric
   format: json
   description: Zero points of the g, r and i difference images.
   inputs: [target, psfmag_difference]
-  decisions: [gri_catalog, diff_phot_type]
+  decisions: [gri_catalog, diff_phot_type, diff_gain, diff_region, diff_reference_class]
   recipe:
     command: >-
       snpipe zcat --target-file {inputs.target} --filetype 3 -f sloan --field {decisions.gri_catalog}
-      --type {decisions.diff_phot_type} --qa-out {output}
+      --type {decisions.diff_phot_type} --diff-variant {decisions.diff_gain}:{decisions.diff_region}:{decisions.diff_reference_class} --qa-out {output}
 - id: mag_difference
   type: metric
   format: json
   description: Calibrated magnitudes of the transient on the difference images (checked against the unsubtracted ones).
   inputs: [target, zcat_difference_bv, zcat_difference_gri, mag_science]
-  decisions: [diff_phot_type]
+  decisions: [diff_phot_type, diff_gain, diff_region, diff_reference_class]
   recipe:
-    command: snpipe mag --target-file {inputs.target} --filetype 3 --type {decisions.diff_phot_type} --qa-out {output}
+    command: snpipe mag --target-file {inputs.target} --filetype 3 --type {decisions.diff_phot_type} --diff-variant {decisions.diff_gain}:{decisions.diff_region}:{decisions.diff_reference_class} --qa-out {output}
 - id: lc_subtracted
   type: table
   format: csv
   description: Template-subtracted light curve (the main product), same columns as lc_unsubtracted, plus .ecsv.
   inputs: [target, mag_difference]
+  decisions: [diff_gain, diff_region, diff_reference_class]
   recipe:
-    command: snpipe getmag --target-file {inputs.target} --filetype 3 --type mag -o {output}
+    command: snpipe getmag --target-file {inputs.target} --filetype 3 --type mag --diff-variant {decisions.diff_gain}:{decisions.diff_region}:{decisions.diff_reference_class} -o {output}
 # ---------------------------------------------------------------- review and report
 - id: review_queue
   type: report

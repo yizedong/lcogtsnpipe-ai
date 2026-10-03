@@ -15,9 +15,10 @@ but only if someone reads the flags.
 
 * Coordinates from TNS (not from a frame header: offset pointings exist).
 * Science DAY-OBS range: file-name dates, first to last frame you want.
-* Reference night: frames without the transient (before explosion, or > ~1 year after for a supernova), in every
-  filter you need, ideally from a 1-m camera. Note its DAY-OBS and camera prefix. If none exists, say so in the
-  report; the unsubtracted light curve is then the result (host light included).
+* References: one per telescope class you use (1-m frames need a 1-m reference, 0.4-m a 0.4-m one): a night
+  without the transient (before explosion, or > ~1 year after for a supernova), in every filter. Note its DAY-OBS
+  and camera prefix. If a class has none, use `survey: ps1` (g r i z) or `survey: sdss` (u g r i z), or leave the
+  class out and report its points as unsubtracted (host light included). The 1-m light curve matters most.
 * `snpipe init-target ...`, then read the file back.
 * Check: `snpipe run TARGET --dry-run` prints every command without errors.
 

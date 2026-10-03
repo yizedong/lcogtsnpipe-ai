@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import requests
 from astropy.io import fits
 
@@ -104,12 +105,20 @@ def find_or_create_target(hdr, conn=None):
 
 
 def add_target(name, ra, dec, conn=None):
-    """Register a target with known coordinates (what SNEx provides to the old pipeline)."""
+    """Register a target with known coordinates (what SNEx provides to the old pipeline). An existing target gets
+    the given coordinates if they differ (a corrected position); returns (id, moved in arcsec or None)."""
     tid = db.target_by_name(name, conn)
     if tid is None:
         tid = db.insert('targets', {'ra0': ra, 'dec0': dec}, conn)
         db.insert('targetnames', {'name': name, 'targetid': tid, 'groupidcode': 32769}, conn)
-    return tid
+        return tid, None
+    old = db.target_info(tid, conn)
+    moved = 3600 * float(np.hypot((ra - old['ra0']) * np.cos(np.radians(dec)), dec - old['dec0']))
+    if moved > 0.01:
+        with (conn or db.connect()):
+            (conn or db.connect()).execute('UPDATE targets SET ra0=?, dec0=? WHERE id=?', (ra, dec, tid))
+        log.warning('target %s moved by %.2f arcsec to %.6f %.6f', name, moved, ra, dec)
+    return tid, moved
 
 
 def register(path, filetype=1, force=False, targetid=None, conn=None):
@@ -146,7 +155,8 @@ def register(path, filetype=1, force=False, targetid=None, conn=None):
 def run(frames, local_dir=None, nthreads=8, force=False, targetid=None):
     """Place all frames (download or copy) in parallel, then register them serially (one DB writer)."""
     def one(f):
-        src = Path(local_dir) / f['filename'] if local_dir else None
+        folder = f.get('_local', local_dir)        # a per-frame source folder (target files) wins
+        src = Path(folder) / f['filename'] if folder else None
         if src is not None and not src.exists():
             return None
         return place_frame(f, src)

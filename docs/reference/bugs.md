@@ -1,6 +1,6 @@
 # Bugs fixed, and why
 
-14 fixed (4 of them inherited from the old pipeline), 12 open, 2 checked and not bugs. Generated from [bugs.json](bugs.json) by `tools/docs/bugs_page.py`; other deliberate differences from the old pipeline are in [compatibility.md](compatibility.md).
+27 fixed (5 of them inherited from the old pipeline), 11 open, 2 checked and not bugs. Generated from [bugs.json](bugs.json) by `tools/docs/bugs_page.py`; other deliberate differences from the old pipeline are in [compatibility.md](compatibility.md).
 
 | id | status | origin | stage | bug |
 |---|---|---|---|---|
@@ -18,7 +18,19 @@
 | B12 | fixed | snpipe only | wcs / all | One bad frame aborted the whole stage |
 | B13 | fixed | snpipe only | diff | Test variants of a difference image overwrote the default image's QA |
 | B14 | fixed | snpipe only | review | A 'delete' verdict on a difference image could delete the raw science frame |
-| O01 | open | also in the old pipeline | diff | Template PSF is not transformed to the science pixel grid |
+| B15 | fixed | snpipe only | run / stages | A changed choice or target re-ran a step, but its stages reused their cached products |
+| B16 | fixed | snpipe only | add-target | A corrected target position never reached the database |
+| B17 | fixed | snpipe only | survey | Survey reference noise header in the wrong units |
+| B18 | fixed | snpipe only | recipe | A target with only survey references stopped at the B/V reference zero points |
+| B19 | fixed | snpipe only | selection / recipe | Chosen subtraction variants were invisible to the later steps |
+| B20 | fixed | snpipe only | ingest | Per-class reference folders collapsed into the last one |
+| B21 | fixed | snpipe only | ingest | A failed survey reference was ignored when LCO references were also present |
+| B22 | fixed | snpipe only | mag | Missing star table of a difference image silently brought back the wrong extinction (B01) |
+| B23 | fixed | snpipe only | diff | The subtraction noise check disappeared when no flux ratio was known |
+| B24 | fixed | snpipe only | psfmag | Difference-image apertures from the reference's seeing only |
+| B25 | fixed | snpipe only | ingest | Ingesting reference frames crashed with per-class references |
+| B26 | fixed | snpipe only | qa | 'Missing input' when only some frames lacked inputs |
+| O01 | fixed | also in the old pipeline | diff | Template PSF is not transformed to the science pixel grid |
 | O02 | open | snpipe only | psf | PSF-fit errors on difference images ignore the subtracted sky and reference noise |
 | O03 | open | snpipe only | psf | Grouped PSF fits have one sky per star instead of one per group |
 | O04 | open | also in the old pipeline | zcat | Zero point 'succeeds' when every calibration star is clipped |
@@ -72,6 +84,15 @@ These are in lcogtsnpipe too, so old and new agreed while both were wrong. Fixin
 - **Why it matters:** A later stage that skips a frame could report the unsubtracted value as the difference value.
 - **Fix:** All photometry columns are reset on the difference row.
 - **Effect on SN 2024pxl:** None on 2024pxl (all columns were recomputed).
+
+### O01 — Template PSF is not transformed to the science pixel grid
+*diff · also in the old pipeline · fix [`1a03262`](https://github.com/yizedong/lcogtsnpipe-ai/commit/1a03262) · found by: Codex review (review_1.md #5); confirmed and measured by the SN 2025rbs diagnosis (reviews/diag_2025rbs_diff.md)*
+
+- **Where:** diff.py (old: lscdiff.py)
+- **What was wrong:** The template is resampled onto the science grid, but PyZOGY gets the template PSF in native template pixels.
+- **Why it matters:** PyZOGY receives a reference PSF 1.9x too wide when a 1-m reference (0.389"/px) is subtracted from 0.4-m science (0.74"/px). Its flux-ratio (gain) fit then comes out 10-30% low (rerun on 2025rbs frames: 0.187 vs 0.229 true), so the transient is too bright by 0.06-0.36 mag and an uncancelled fraction of the host is added (up to 1-2 mag late for the bright 2025rbs host). Even on 1-m frames the iterative fit is 1-6% low.
+- **Fix:** Resample the reference PSF to the science pixel scale before PyZOGY; set the flux ratio from the zero points (matches the field-star ratio within 2%) or flag |fit/zero-point - 1| > 3% (choice pending). Note: this reverses the reading of the earlier diff_gain=zeropoint test (the zero-point ratio was right, the fit biased).
+- **Effect on SN 2024pxl:** 2025rbs: 0.4-m difference magnitudes 0.4-1.6 mag brighter than the unsubtracted ones (impossible); 1-m non-tfn sites -0.02..-0.08. 2024pxl: same bias, smaller host; the published light curve (old pipeline, same bug) probably carries it on 0.4-m points. Not yet re-measured after a fix.
 
 
 ## Fixed: bugs in the new code
@@ -168,19 +189,118 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Fix:** Delete accepts only a .diff. file name (otherwise an error) and removes only files of that difference image.
 - **Effect on SN 2024pxl:** None: no delete verdict was ever given on 2024pxl. Tested on dummy files: the science frame is refused; deleting the diff keeps the science image and other variants.
 
+### B15 — A changed choice or target re-ran a step, but its stages reused their cached products
+*run / stages · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+
+- **Where:** run.py, cli.py, catalogs.py
+- **What was wrong:** Stages skip frames whose products exist ('psf already calculated'); the recipe never forces, so after changing e.g. the number of PSF stars or the reference night the executor re-ran the step and recorded the new configuration over the old products. catalogs --force only retried empty catalogs.
+- **Why it matters:** Results that do not match their recorded configuration.
+- **Fix:** A step whose signature changed since it last ran (command, target facts incl. the frames.json contents, input steps) runs with SNPIPE_FORCE=1 and its stages redo their products; snpipe run --force forces everything; catalogs --force re-queries.
+- **Effect on SN 2024pxl:** None on the runs so far (no configuration was changed in place).
+
+### B16 — A corrected target position never reached the database
+*add-target · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+
+- **Where:** ingest.add_target, cli.py
+- **What was wrong:** An existing target kept its old coordinates; add-target still reported the new ones.
+- **Why it matters:** Forced photometry at the wrong position after a coordinate correction.
+- **Fix:** Coordinates are updated (and the move reported); the changed target facts make snpipe run redo the position-dependent steps.
+- **Effect on SN 2024pxl:** None so far.
+
+### B17 — Survey reference noise header in the wrong units
+*survey · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+
+- **Where:** survey.py
+- **What was wrong:** RDNOISE held the sky RMS in image units, but the psf noise model reads it in electrons (variance = data/GAIN + (RDNOISE/GAIN)^2).
+- **Why it matters:** Wrong weights in the PSF fits of survey references (background noise 1/GAIN too small).
+- **Fix:** RDNOISE = GAIN x sky RMS.
+- **Effect on SN 2024pxl:** Found before any production use of survey references.
+
+### B18 — A target with only survey references stopped at the B/V reference zero points
+*recipe · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+
+- **Where:** cli.py cmd_stage
+- **What was wrong:** PS1/SDSS have no B or V; the B/V reference zcat selected nothing and exited 3 (missing input), blocking the subtraction.
+- **Why it matters:** Survey-reference runs could not finish.
+- **Fix:** A stage with no frames because the filter was not observed reports 'nothing to do' (exit 0); missing products still exit 3.
+- **Effect on SN 2024pxl:** Found before production use.
+
+### B19 — Chosen subtraction variants were invisible to the later steps
+*selection / recipe · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+
+- **Where:** selection.py, astra.yaml
+- **What was wrong:** Variants (.fit = PyZOGY gain fit, .cut = cutout) and cross-class differences were never selected downstream, even when the universe chose them.
+- **Why it matters:** A universe with diff_gain=fit or diff_reference_class=any stopped after the subtraction.
+- **Fix:** The recipe passes --diff-variant gain:region:reference_class (from the universe) to every step after the subtraction; selection keeps exactly the chosen variant.
+- **Effect on SN 2024pxl:** None on baseline runs.
+
+### B20 — Per-class reference folders collapsed into the last one
+*ingest · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+
+- **Where:** target.frames_for, ingest.run
+- **What was wrong:** frames_for concatenated all classes' frame records but returned only the last folder.
+- **Why it matters:** 1-m reference frames looked up in the 0.4-m folder (or downloaded instead of copied).
+- **Fix:** Every record carries its own source folder.
+- **Effect on SN 2024pxl:** None (both examples have one reference class).
+
+### B21 — A failed survey reference was ignored when LCO references were also present
+*ingest · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+
+- **Where:** cli.py cmd_ingest
+- **What was wrong:** The exit code only considered survey errors when there were no LCO reference frames.
+- **Why it matters:** A run continued with a class silently unsubtracted.
+- **Fix:** Any failed survey reference makes the step exit 4 (external service).
+- **Effect on SN 2024pxl:** None so far.
+
+### B22 — Missing star table of a difference image silently brought back the wrong extinction (B01)
+*mag · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+
+- **Where:** mag.py
+- **What was wrong:** Without the difference image's sn2 header, mag fell back to the science frame's site and airmass.
+- **Why it matters:** Up to the B01 error (0.15 mag) on such frames, without a warning.
+- **Fix:** A difference image without a readable sn2 header fails its mag check ('rerun diff').
+- **Effect on SN 2024pxl:** None (all sn2 files present).
+
+### B23 — The subtraction noise check disappeared when no flux ratio was known
+*diff · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+
+- **Where:** diff.py
+- **What was wrong:** With no zero points and no field-star ratio, the expected noise was undefined and the check was skipped silently.
+- **Why it matters:** A bad subtraction passing without a noise verdict.
+- **Fix:** The frame gets a warning 'noise check not evaluated'.
+- **Effect on SN 2024pxl:** None observed.
+
+### B24 — Difference-image apertures from the reference's seeing only
+*psfmag · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+
+- **Where:** psfmag.py
+- **What was wrong:** The aperture radius used the reference's FWHM; a difference image's PSF is about the broader of the two images' (a sharp survey reference with a 2.5" science frame: 3 x 1.2" = 1.4 science FWHM, a few % of the flux lost).
+- **Why it matters:** Faint bias of the transient on differences with a much sharper reference.
+- **Fix:** Radius from the larger of the reference and science FWHM, so the transient's aperture encloses its flux like the reference stars' magp3 does for the zero point.
+- **Effect on SN 2024pxl:** Small for LCO references (similar seeing); matters for survey references.
+
+### B25 — Ingesting reference frames crashed with per-class references
+*ingest · snpipe only · 2026-10-03 · fix [`2500a01`](https://github.com/yizedong/lcogtsnpipe-ai/commit/2500a01) · found by: end-to-end runs of 2025rbs*
+
+- **Where:** cli.py cmd_ingest
+- **What was wrong:** The result line read reference.dayobs, which no longer exists with one reference per class (KeyError).
+- **Why it matters:** The step failed after the frames had been ingested (2025rbs finishing run).
+- **Fix:** Fixed with the survey-reference change (2500a01).
+- **Effect on SN 2024pxl:** None (frames were ingested).
+
+### B26 — 'Missing input' when only some frames lacked inputs
+*qa · snpipe only · 2026-10-03 · fix [`7306d30`](https://github.com/yizedong/lcogtsnpipe-ai/commit/7306d30) · found by: end-to-end runs of 2025rbs*
+
+- **Where:** qa.exit_code
+- **What was wrong:** A stage with 746 frames already done and 3 without a PSF exited 3 and stopped the run.
+- **Why it matters:** Runs stopped on normal partial results.
+- **Fix:** Exit 3 only when every skipped frame lacked its inputs (7306d30).
+- **Effect on SN 2024pxl:** Stopped the 2025rbs finishing run once.
+
 
 ## Open: verified, not fixed yet
 
 Checked to be real; effect on SN 2024pxl given.
-
-### O01 — Template PSF is not transformed to the science pixel grid
-*diff · also in the old pipeline · found by: Codex review (review_1.md #5); confirmed and measured by the SN 2025rbs diagnosis (reviews/diag_2025rbs_diff.md)*
-
-- **Where:** diff.py (old: lscdiff.py)
-- **What was wrong:** The template is resampled onto the science grid, but PyZOGY gets the template PSF in native template pixels.
-- **Why it matters:** PyZOGY receives a reference PSF 1.9x too wide when a 1-m reference (0.389"/px) is subtracted from 0.4-m science (0.74"/px). Its flux-ratio (gain) fit then comes out 10-30% low (rerun on 2025rbs frames: 0.187 vs 0.229 true), so the transient is too bright by 0.06-0.36 mag and an uncancelled fraction of the host is added (up to 1-2 mag late for the bright 2025rbs host). Even on 1-m frames the iterative fit is 1-6% low.
-- **Proposed fix:** Resample the reference PSF to the science pixel scale before PyZOGY; set the flux ratio from the zero points (matches the field-star ratio within 2%) or flag |fit/zero-point - 1| > 3% (choice pending). Note: this reverses the reading of the earlier diff_gain=zeropoint test (the zero-point ratio was right, the fit biased).
-- **Effect on SN 2024pxl:** 2025rbs: 0.4-m difference magnitudes 0.4-1.6 mag brighter than the unsubtracted ones (impossible); 1-m non-tfn sites -0.02..-0.08. 2024pxl: same bias, smaller host; the published light curve (old pipeline, same bug) probably carries it on 0.4-m points. Not yet re-measured after a fix.
 
 ### O02 — PSF-fit errors on difference images ignore the subtracted sky and reference noise
 *psf · snpipe only · found by: Codex review (review_1.md #3), verified*

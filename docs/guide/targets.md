@@ -68,8 +68,12 @@ unsubtracted light curve and still writes the review queue and the report.
   same galaxy). That does not matter: the frames listed for this target are attached to it whatever their OBJECT.
 * Subtracting one class with another class's reference (decision `diff_reference_class: any`) is possible for
   tests only; the 2024pxl validation runs did so for 0.4-m frames, the published light curve did not (1-m only).
-* Archival survey references (SDSS, PS1), which the manual uses when no LCO reference exists, are not supported
-  yet.
+* Survey references, when no LCO reference exists: `reference: {1m0: {survey: ps1}}` (Pan-STARRS1, g r i z,
+  north of dec −30°) or `survey: sdss` (u g r i z, about a third of the sky, single nights of 2000-2008: use it
+  when the PS1 epoch 2010-2014 is contaminated, e.g. by an earlier transient in the host). The pipeline downloads a
+  stack cutout (PS1) or the fields of one SDSS night covering the science field, masks bad pixels, keeps the host
+  (no background subtraction), registers it once onto each science frame, and takes the flux ratio from the field
+  stars. B, V, U frames cannot use a survey reference. A failed download stops the step with exit 4 (rerun later).
 * U band needs Landolt standard-star nights to calibrate (no all-sky U catalog).
 
 ### frames.json and local frames

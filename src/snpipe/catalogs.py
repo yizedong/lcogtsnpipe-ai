@@ -184,8 +184,9 @@ def run(targetid, fields=FIELDS, radius=20., use_panstarrs=False, force=False, c
     t = db.target_info(targetid, conn)
     done = {}
     for field in fields:
-        # '' = earlier query found nothing: retry on --force, or for sloan when switching to Pan-STARRS
-        retry = t[field + '_cat'] == '' and (force or (field == 'sloan' and use_panstarrs))
+        # force: query again (e.g. the target position changed); '' = an earlier query found nothing: retry it
+        # when switching the sloan field to Pan-STARRS
+        retry = force or (t[field + '_cat'] == '' and field == 'sloan' and use_panstarrs)
         if t[field + '_cat'] is not None and not retry:
             done[field] = t[field + '_cat']
             continue
@@ -193,7 +194,7 @@ def run(targetid, fields=FIELDS, radius=20., use_panstarrs=False, force=False, c
         d = config.catalog_dir(field)
         d.mkdir(parents=True, exist_ok=True)
         found = ''
-        for name in t['names']:
+        for name in ([] if force and field != 'landolt' else t['names']):   # forced: do not reuse a file
             fn = name.translate(_BADCHARS) + '_' + source + '.cat'
             if (d / fn).exists():
                 found = fn

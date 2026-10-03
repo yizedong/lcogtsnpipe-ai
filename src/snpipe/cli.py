@@ -66,6 +66,7 @@ def parser():
     a.add_argument('--keep-going', action='store_true', help='after a stopped step, still run independent steps')
     a.add_argument('--recipe', help='another astra.yaml (default: the packaged pipeline/astra.yaml)')
     a.add_argument('--sbatch', action='store_true', help='print a SLURM job script for this run instead')
+    a.add_argument('--force', action='store_true', help='every step that runs redoes its cached per-frame products')
     a = sub.add_parser('status', help='what ran for a target: status, exit code and time per step')
     a.add_argument('target_dir')
     a.add_argument('--universe', default='baseline')
@@ -132,6 +133,8 @@ def parser():
         g.add_argument('-b', '--bad', help='only frames where this stage is not done (psf, zcat, mag, psfmag, wcs)')
         g.add_argument('--filetype', type=int, default=1, help='1 science, 3 difference, 4 reference')
         g.add_argument('--frames-file', help='only the frame names listed in this file')
+        g.add_argument('--diff-variant', metavar='GAIN:REGION:REFCLASS',
+                       help='difference images of these choices (default zeropoint:full:same); set by the recipe')
         a.add_argument('-F', '--force', action='store_true', help='redo frames that are already done')
         a.add_argument('-j', '--jobs', type=int, default=None, help='frames in parallel (default 8, diff 2)')
         a.add_argument('--qa-out', help='also write the stage summary JSON here')
@@ -212,7 +215,7 @@ def cmd_run(args):
         print(run.sbatch_script(args.target_dir, args.universe))
         return 0
     summary, rc = run.run(args.target_dir, args.universe, only=args.only, start=args.start, dry_run=args.dry_run,
-                          keep_going=args.keep_going, analysis=args.recipe)
+                          keep_going=args.keep_going, analysis=args.recipe, force=args.force)
     print(json.dumps(summary, indent=1))
     return rc
 
@@ -270,12 +273,16 @@ def cmd_add_target(args):
         args.name, args.ra, args.dec, args.alias = t['name'], float(t['ra']), float(t['dec']), t['aliases']
     if args.name is None or args.ra is None or args.dec is None:
         raise TargetError('give NAME --ra --dec, or --target-file')
-    tid = ingest.add_target(args.name, args.ra, args.dec)
+    tid, moved = ingest.add_target(args.name, args.ra, args.dec)
     for al in args.alias:
         if db.target_by_name(al) is None:
             db.insert('targetnames', {'name': al, 'targetid': tid, 'groupidcode': 32769})
-    report_result({'targetid': tid, 'name': args.name, 'ra': args.ra, 'dec': args.dec, 'aliases': args.alias},
-                  args.qa_out)
+    res = {'targetid': tid, 'name': args.name, 'ra': args.ra, 'dec': args.dec, 'aliases': args.alias}
+    if moved:
+        res['moved_arcsec'] = moved
+        res['message'] = ('coordinates updated; products that depend on the position are redone by snpipe run '
+                          '(target facts changed)')
+    report_result(res, args.qa_out)
     return 0
 
 
@@ -296,9 +303,10 @@ def cmd_ingest(args):
         paths, new = ingest.run(frames, local, args.jobs, targetid=tid)
         if args.frames == 'science':
             res['dayobs'] = t['science']['dayobs']
-        elif not frames and res['survey']:
+        survey_failed = any('error' in v for v in res.get('survey', {}).values())
+        if args.frames == 'reference' and not frames and res.get('survey'):
             report_result({**res, 'frames': 0, 'placed': 0, 'new_rows': 0, 'missing': []}, args.qa_out)
-            return qa.EXIT['external'] if any('error' in v for v in res['survey'].values()) else qa.EXIT['ok']
+            return qa.EXIT['external'] if survey_failed else qa.EXIT['ok']
     else:
         if not args.target:
             raise TargetError('give --target or --target-file')
@@ -311,41 +319,44 @@ def cmd_ingest(args):
     placed = {p.name for p in paths}
     missing = sorted(f['filename'] for f in frames if f['filename'].replace('.fz', '') not in placed)
     report_result({**res, 'frames': len(frames), 'placed': len(paths), 'new_rows': new, 'missing': missing}, args.qa_out)
+    if t and args.frames == 'reference' and survey_failed:
+        return qa.EXIT['external']                   # a survey reference could not be made (archive/service)
     return qa.EXIT['ok'] if frames and not missing else qa.EXIT['missing_input']
 
 
 def survey_references(t, tid, args):
-    """Build the survey reference images (one per filter with science frames of a class whose reference is a
-    survey) and register them as reference images (filetype 4). Returns {filter: metrics or error}."""
+    """Build the survey reference images (PS1, SDSS) for every filter with science frames of a class whose reference
+    is a survey, and register them as reference images (filetype 4). Returns {survey:filter: metrics or error}."""
     from . import config, ingest, survey
     from .target import frame_class
-    classes = {c for c, r in (t['reference'] or {}).items() if r.get('survey')}
-    if not classes:
+    surveys = {c: r['survey'] for c, r in (t['reference'] or {}).items() if r.get('survey')}
+    if not surveys:
         return {}
     rows = [r for r in db.query('SELECT filename, filepath, filter FROM photlco WHERE targetid=? AND filetype=1 '
-                                'AND quality=127', (tid,)) if frame_class(r['filename']) in classes]
-    out = {}
+                                'AND quality=127', (tid,)) if frame_class(r['filename']) in surveys]
     if not rows:
         return {'all': {'error': 'no science frames of the classes with a survey reference: ingest science first'}}
     sample = [Path(r['filepath']) / r['filename'] for r in rows[::max(1, len(rows) // 20)]]
     size = min(survey.field_size(sample, float(t['ra']), float(t['dec'])), survey.MAX_SIZE_ARCSEC)
-    for filt in sorted({r['filter'] for r in rows}):
+    wanted = sorted({(surveys[frame_class(r['filename'])], r['filter']) for r in rows})
+    out = {}
+    for sv, filt in wanted:
+        key = f'{sv}:{filt}'
         try:
-            band = survey.ps1_band(filt)
+            band = survey.survey_band(sv, filt)
         except survey.SurveyError as e:
-            out[filt] = {'skipped': str(e)}
+            out[key] = {'skipped': str(e)}
             continue
-        name = f"ps1-{t['name']}-{band}.fits"
-        path = config.workdir() / 'data' / 'ps1' / name
+        name = f"{sv}-{t['name']}-{band}.fits"
+        path = config.workdir() / 'data' / sv / name
         if path.exists() and not getattr(args, 'force', False) and db.get_frame(name):
-            out[filt] = {'exists': str(path)}
+            out[key] = {'exists': str(path)}
             continue
         try:
-            m = survey.ps1_reference(float(t['ra']), float(t['dec']), size, filt, path, t['name'])
+            out[key] = survey.build(sv, float(t['ra']), float(t['dec']), size, filt, path, t['name'])
             ingest.register(path, filetype=4, force=True, targetid=tid)
-            out[filt] = m
         except Exception as e:
-            out[filt] = {'error': f'{type(e).__name__}: {e}'}
+            out[key] = {'error': f'{type(e).__name__}: {e}'}
     return out
 
 
@@ -356,14 +367,25 @@ def cmd_catalogs(args):
     if tid is None:
         raise TargetError('unknown target: run add-target first')
     res = catalogs.run(tid, args.fields, use_panstarrs=args.panstarrs or args.sloan_source == 'panstarrs',
-                       force=args.force)
+                       force=args.force or env_force())
     report_result(res, args.output)
     return qa.EXIT['external'] if any(v is None for v in res.values()) else 0
 
 
 # ---------------------------------------------------------------- stages
 
+# stages whose per-frame products are cached (skipped when present): SNPIPE_FORCE=1 from `snpipe run` redoes them
+CACHED = ('cosmic', 'psf', 'psfmag', 'zcat', 'template', 'diff')
+
+
+def env_force():
+    import os
+    return os.getenv('SNPIPE_FORCE') == '1'
+
+
 def cmd_stage(args):
+    if args.cmd in CACHED and env_force():
+        args.force = True
     apply_target(args)
     if args.jobs is None:
         args.jobs = 2 if args.cmd == 'diff' else 8
@@ -375,6 +397,15 @@ def cmd_stage(args):
         report_result({'stage': args.cmd, 'status': 'ok', 'n_frames': 0,
                        'message': 'nothing to do: survey references are made directly as reference images'}, args.qa_out)
         return qa.EXIT['ok']
+    if not frames and getattr(args, 'filter', None):
+        import copy
+        wider = copy.copy(args)
+        wider.filter = None
+        if select_frames(wider):                      # frames exist, just none in these filters: nothing to do
+            report_result({'stage': args.cmd, 'status': 'ok', 'n_frames': 0,
+                           'message': f"no frames in filters {' '.join(args.filter)} (not observed): nothing to do"},
+                          args.qa_out)
+            return qa.EXIT['ok']
     if not frames:
         report_result({'stage': args.cmd, 'status': 'skipped', 'n_frames': 0,
                        'message': 'no frames selected (check -n/-e/--filetype, or run the earlier stages)'}, args.qa_out)

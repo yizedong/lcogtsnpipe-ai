@@ -15,9 +15,12 @@ failed their checks and are left out downstream); 2, 3, 4 stop the steps that de
 still runs independent steps). ``snpipe run`` itself exits 0 when every step finished (with or without failed
 frames), otherwise with the exit code of the first step that stopped.
 
-Resume: a step is not repeated when its command, the target's facts (name, coordinates, nights, frame folders),
-the signatures of its input steps and its result file are unchanged since it finished. Code changes and
-``resources`` do not invalidate results: after updating the code, rerun with ``--from STEP``.
+Resume: a step is not repeated when its command, the target's facts (name, coordinates, nights, frame folders and
+their frames.json), the signatures of its input steps and its result file are unchanged since it finished. When
+they changed since the step was last run, the step runs with SNPIPE_FORCE=1, so the stages redo their cached
+per-frame products instead of reusing them; ``--force`` does that for every step that runs. A plain resume after
+an interruption forces nothing. Code changes and ``resources`` do not invalidate results: after updating the
+code, rerun with ``--from STEP --force``.
 
 A target without a ``reference`` section has no subtraction: every step downstream of the reference frames is
 left out, except the review queue and the report (outputs of type ``report``), which use what exists.
@@ -152,7 +155,7 @@ def _print(line):
 
 
 def run(target_dir, universe='baseline', only=None, start=None, dry_run=False, keep_going=False, analysis=None,
-        echo=_print):
+        echo=_print, force=False):
     t = T.load(target_dir)
     tdir = Path(t['dir'])
     u, upath = load_universe(tdir, universe)
@@ -196,6 +199,7 @@ def run(target_dir, universe='baseline', only=None, start=None, dry_run=False, k
             echo(f'--- {sid}: blocked (an input step stopped)')
             continue
         prev = state.get(sid, {})
+        changed = bool(prev.get('tried_sig')) and prev['tried_sig'] != sig
         if (sid not in forced and not only and prev.get('sig') == sig and prev.get('exit') in CONTINUE
                 and paths[sid].exists()):
             summary[sid] = prev['status'] + ' (done)'
@@ -206,14 +210,18 @@ def run(target_dir, universe='baseline', only=None, start=None, dry_run=False, k
             echo(f'>>> {sid}\n    {cmd}')
             state[sid] = {'sig': sig}
             continue
-        echo(f'>>> {time.strftime("%H:%M:%S")} {sid}')
+        redo = force or changed
+        echo(f'>>> {time.strftime("%H:%M:%S")} {sid}' + (' (inputs or choices changed: redo cached products)' if changed
+                                                          else ' (forced)' if force else ''))
         t0 = time.time()
         with open(res / 'logs' / f'{sid}.log', 'w') as log:
-            log.write(f'$ {cmd}\n')
+            log.write(f'$ {"SNPIPE_FORCE=1 " if redo else ""}{cmd}\n')
             log.flush()
-            rc = subprocess.run(cmd, shell=True, cwd=wd, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
+            rc = subprocess.run(cmd, shell=True, cwd=wd, env={**env, 'SNPIPE_FORCE': '1' if redo else '0'},
+                                stdout=log, stderr=subprocess.STDOUT).returncode
         status = CONTINUE.get(rc) or STOP.get(rc, f'error_{rc}')
-        state[sid] = dict(command=cmd, exit=rc, status=status, sig=sig if rc in CONTINUE else None,
+        state[sid] = dict(command=cmd, exit=rc, status=status, sig=sig if rc in CONTINUE else None, tried_sig=sig,
+                          forced=redo,
                           started=time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(t0)),
                           seconds=round(time.time() - t0, 1), log=str(res / 'logs' / f'{sid}.log'))
         summary[sid] = status

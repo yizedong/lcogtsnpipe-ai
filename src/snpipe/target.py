@@ -41,7 +41,7 @@ SCHEMA_VERSION = 1
 KEYS = {'schema_version', 'name', 'aliases', 'ra', 'dec', 'coordinates', 'workdir', 'science', 'reference',
         'templates', 'resources'}
 PART_KEYS = {'science': {'dayobs', 'frames'}, 'reference': {'dayobs', 'camera', 'frames', 'survey'}}
-SURVEYS = ('ps1',)
+SURVEYS = ('ps1', 'sdss')
 SURVEY_DAYOBS = '20000101-20991231'   # a survey reference matches any date
 CLASSES = ('1m0', '0m4', '2m0')
 CAMERA_CLASS = {'fa': '1m0', 'fl': '1m0', 'sq': '0m4', 'ep': '2m0', 'fs': '2m0', 'em': '2m0'}
@@ -164,10 +164,17 @@ def load(path):
 
 def facts(t):
     """What determines the results (for resume signatures): everything except workdir and resources."""
+    import hashlib
     plain = lambda v: ({k: plain(x) for k, x in v.items()} if isinstance(v, dict) else
                        [plain(x) for x in v] if isinstance(v, list) else str(v) if isinstance(v, Path) else v)
     keep = ('name', 'aliases', 'ra', 'dec', 'science', 'reference')
-    return yaml.safe_dump(plain({k: v for k, v in t.items() if k in keep}), sort_keys=True, default_flow_style=True)
+    doc = plain({k: v for k, v in t.items() if k in keep})
+    lists = []                                       # the frame lists themselves, not only their folders
+    for sel in [t['science']] + list((t['reference'] or {}).values()):
+        fj = Path(sel['frames']) / 'frames.json' if sel.get('frames') not in (None, 'archive') else None
+        lists.append(hashlib.sha256(fj.read_bytes()).hexdigest()[:16] if fj and fj.exists() else '')
+    doc['frame_lists'] = lists
+    return yaml.safe_dump(doc, sort_keys=True, default_flow_style=True)
 
 
 def activate(t):
@@ -196,13 +203,14 @@ def frames_for(t, part):
     if part == 'reference':
         if not t['reference']:
             raise TargetError(f"{t['file']}: no reference section")
-        frames, local = [], None
+        frames = []
         for cls, r in t['reference'].items():
             if r.get('survey'):
                 continue                      # made by snpipe.survey, not ingested from frames
             fr, local = _frames(t, r)
-            frames += [f for f in fr if frame_class(f['filename']) == cls and r['camera'] in f['filename']]
-        return frames, local
+            # each class can have its own folder: every record carries where to copy it from (None = download)
+            frames += [{**f, '_local': local} for f in fr if frame_class(f['filename']) == cls and r['camera'] in f['filename']]
+        return frames, None
     return _frames(t, t['science'])
 
 

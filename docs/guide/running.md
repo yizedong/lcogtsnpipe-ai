@@ -24,10 +24,13 @@ Useful options:
 | `--from STEP` | rerun STEP and every step after it (e.g. after a verdict, or new frames) |
 | `--only STEP` | run one step |
 | `--keep-going` | when a step stops, still run the steps that do not depend on it |
+| `--force` | every step that runs redoes its per-frame products |
 | `--sbatch` | print a SLURM job script for the run |
 
 **Resuming.** A step that finished (exit 0 or 1) with the same command and the same inputs is not run again, so
-after an interruption just run the same command. The stages themselves also skip frames that are already done.
+after an interruption just run the same command; the stages also skip frames that are already done. When a step's
+command, the target's facts (coordinates, nights, frame lists) or an earlier step changed since it last ran, it is
+rerun with its per-frame products redone (`SNPIPE_FORCE=1`). After a code update use `--from STEP --force`.
 
 **On a cluster:**
 

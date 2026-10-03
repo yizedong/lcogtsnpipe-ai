@@ -24,8 +24,11 @@ Every stage checks every frame and writes `<frame>.<stage>.qa.json` next to the 
 | psfmag | PSF-fit error | defined | fail (fit did not converge) |
 | psfmag | change between background iterations | ≤ 0.05 mag | warn |
 | zcat | calibration stars kept after clipping | ≥ 5 | warn |
-| diff | noise of the difference / noise of the reference | ≤ 10 (warn above 5) | fail (usually a failed flux-ratio fit) |
+| diff | noise of the difference / noise expected from science and reference | ≤ 3 (warn above 1.5) | fail: wrong flux scale or misregistration |
+| diff | field-star cancellation: fraction of field-star flux left in the difference | ≤ 10 % (warn above 3 %) | fail: flux ratio or registration off |
+| diff | flux ratio used vs the field-star ratio | ≤ 3 % | warn |
 | diff | masked fraction | ≤ 50 % | warn |
+| diff | reference of the frame's telescope class | exists | skipped ("no reference for this telescope class"), not an error |
 | mag | difference magnitude − unsubtracted magnitude | ≥ −0.2 | fail: the difference cannot be brighter than SN + host |
 | getmag | point vs the median of its neighbours (±1.5 d, same band) | 5σ, ≥ 0.1 mag | flagged, kept (look at it) |
 
@@ -52,6 +55,7 @@ The manual's advice, applied in order until the aperture-correction check passes
 | most psf frames of one telescope fail | wrong saturation or a defocused/trailed night | look at the packets; `bad` the frames, or redo with `--param fwhm=...` |
 | psfmag fails on many frames of a night | the transient is faint/absent, or coordinates wrong | check `ra`/`dec` in target.yaml against the packet stamps |
 | zcat warn on a whole filter | few catalog stars in that filter (e.g. B on 0.4 m) | accept, or change `bv_catalog` / `gri_catalog` |
-| diff fails with noise ratio 20-60 | flux-ratio fit failed | review; a test universe with `diff_gain: zeropoint` can rescue some frames (but is 0.06 mag fainter on average) |
+| diff warns/fails on field-star cancellation | flux ratio off (zero point of a cloudy frame?) or registration | look at the packet: stars as dipoles = registration, stars as positive/negative blobs = flux ratio; check the frame's zero point |
+| every frame of one class skipped in diff | no reference for that telescope class | add a reference for the class (an LCO night, or `survey: ps1`/`sdss`) or accept unsubtracted points |
 | mag fails (difference brighter than total) | bad subtraction or bad unsubtracted measurement | review both packets |
 | no difference images for a filter | no reference frame in that filter | expected; the unsubtracted light curve still has it |
