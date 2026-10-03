@@ -10,6 +10,15 @@ from . import db, qa, sites
 TEST_PRODUCTS = ('.fit.diff', '.zp.diff', '.cut.diff', '.cut.zp.diff', '.cut.fit.diff')
 
 
+def cross_class(filename):
+    """A difference image made with a reference of another telescope class (``<frame>.optimal.<cam>.diff.fits``
+    where <cam>'s class differs from the frame's), e.g. a 0.4-m frame minus a 1-m reference."""
+    import re
+    from .target import CAMERA_CLASS, frame_class
+    m = re.search(r'\.optimal\.([a-z]{2})\.', filename)
+    return bool(m) and CAMERA_CLASS.get(m.group(1), frame_class(filename)) != frame_class(filename)
+
+
 def apply_target(args):
     """Fill -n, -e, --tempdate, --temptel, -T and -j from ``--target-file``. Returns the target (or None)."""
     if not getattr(args, 'target_file', None):
@@ -78,4 +87,5 @@ def select_frames(args, conn=None):
     if getattr(args, 'frames_file', None):
         want = set(open(args.frames_file).read().split())
         return [r for r in rows if r['filename'] in want]
-    return [r for r in rows if not any(t in r['filename'] for t in TEST_PRODUCTS)]
+    # test variants and cross-class difference images only when listed explicitly (--frames-file)
+    return [r for r in rows if not any(t in r['filename'] for t in TEST_PRODUCTS) and not cross_class(r['filename'])]

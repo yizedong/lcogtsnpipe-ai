@@ -192,3 +192,11 @@ def test_pick_reference_same_class_by_default():
     assert pick_reference('cpt1m012-fa06-20990105-0001-e91.fits', refs) == ('1m0', refs['1m0'])
     assert pick_reference('tfn0m414-sq31-20990105-0001-e91.fits', refs) == ('0m4', None)
     assert pick_reference('tfn0m414-sq31-20990105-0001-e91.fits', refs, 'any') == ('1m0', refs['1m0'])
+
+
+def test_cross_class_differences_are_not_selected_by_default():
+    from snpipe.selection import cross_class
+    assert cross_class('tfn0m419-sq32-20250720-0152-e91.optimal.fa.diff.fits')        # 0.4-m minus 1-m reference
+    assert not cross_class('cpt1m010-fa14-20250715-0303-e91.optimal.fa.diff.fits')    # 1 m minus 1 m
+    assert not cross_class('elp1m008-fa16-20240907-0115-e91.optimal.fl.diff.fits')    # fa science, fl reference: both 1 m
+    assert not cross_class('cpt1m010-fa14-20250715-0303-e91.fits')                    # not a difference image
