@@ -400,7 +400,7 @@ difference images: science minus reference (PyZOGY)
 snpipe diff [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE] [-d ID]
                    [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT] [--tempdate TEMPDATE]
                    [--temptel TEMPTEL] [--normalize {t,i}] [--unmask] [--register REGISTER] [--region {full,cutout}] [--gain {zeropoint,fit}]
-                   [--cutout-size CUTOUT_SIZE]
+                   [--cutout-size CUTOUT_SIZE] [--reference-class {same,any}]
 
 options:
   -h, --help            show this help message and exit
@@ -416,6 +416,9 @@ options:
   --gain {zeropoint,fit}
                         flux ratio science/reference: from the zero points (default) or the PyZOGY fit (old default, biased low: bug O01)
   --cutout-size CUTOUT_SIZE
+  --reference-class {same,any}
+                        with --target-file: subtract only with a reference of the frame's own telescope class (same, the manual) or fall back to
+                        another class (any)
 
 frame selection:
   --target-file TARGET_FILE

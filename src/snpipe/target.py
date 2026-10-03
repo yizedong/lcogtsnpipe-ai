@@ -14,14 +14,19 @@ decision, selected in a universe file next to it (``universes/baseline.yaml``). 
     science:
       dayobs: 20250715-20260917         # DAY-OBS range (YYYYMMDD or YYYYMMDD-YYYYMMDD)
       frames: ${SNPIPE_RAW}/2025rbs     # folder with frames.json + the files, or "archive"
-    reference:                          # optional: without it there is no subtraction
-      dayobs: 20260918                  # the reference (template) night
-      camera: fa                        # camera prefix of the reference frames
-      frames: ${SNPIPE_RAW}/2025rbs     # optional, default: science.frames
+    reference:                          # optional; one entry per telescope class (1m0, 0m4, 2m0)
+      1m0:
+        dayobs: 20260918                # the reference (template) night of that class
+        camera: fa                      # camera prefix of the reference frames
+        frames: ${SNPIPE_RAW}/2025rbs   # optional, default: science.frames
+      # 0m4: {dayobs: ..., camera: sq}  # a class without a reference gets no subtraction
     resources:
       jobs: 8                           # parallel frames for most stages
       diff_jobs: 2                      # parallel frames for subtraction (~7 GB memory each)
 
+A single reference (``reference: {dayobs, camera}``) is accepted and applies to its camera's class.
+Science frames are subtracted only with a reference of their own telescope class (the manual: "the best one for
+each camera-filter combination"), unless the decision diff_reference_class allows another class.
 ``templates:`` is accepted as the old name of ``reference:``. Relative paths are relative to the file; ``${VAR}``
 is replaced by the environment variable. DAY-OBS is the observing-night label in LCO file names.
 """
@@ -36,6 +41,14 @@ SCHEMA_VERSION = 1
 KEYS = {'schema_version', 'name', 'aliases', 'ra', 'dec', 'coordinates', 'workdir', 'science', 'reference',
         'templates', 'resources'}
 PART_KEYS = {'science': {'dayobs', 'frames'}, 'reference': {'dayobs', 'camera', 'frames'}}
+CLASSES = ('1m0', '0m4', '2m0')
+CAMERA_CLASS = {'fa': '1m0', 'fl': '1m0', 'sq': '0m4', 'ep': '2m0', 'fs': '2m0', 'em': '2m0'}
+
+
+def frame_class(filename):
+    """Telescope class of an LCO frame from its name: cpt1m012-... -> 1m0, elp0m414-... -> 0m4, ogg2m001 -> 2m0."""
+    c = filename[3:6]
+    return c if c in CLASSES else None
 RESOURCE_KEYS = {'jobs', 'diff_jobs'}
 
 
@@ -107,15 +120,26 @@ def load(path):
     ref = t.get('reference')
     if ref:
         ref = dict(ref)
-        _unknown(f'{path}: reference', ref, PART_KEYS['reference'])
-        ref['dayobs'] = _dayobs(f'{path}: reference', ref.get('dayobs'))
-        if not ref.get('camera'):
-            raise TargetError(f'{path}: reference.camera (e.g. fa, fl, sq) is required')
-        ref['frames'] = _path(base, ref.get('frames')) or sci['frames']
+        if set(ref) & PART_KEYS['reference']:          # a single reference: its camera decides the class
+            cls = CAMERA_CLASS.get(str(ref.get('camera', '')))
+            if cls is None:
+                raise TargetError(f"{path}: reference camera {ref.get('camera')!r}: give the class explicitly, "
+                                  f"e.g. reference: {{1m0: {{dayobs: ..., camera: ...}}}}")
+            ref = {cls: ref}
+        _unknown(f'{path}: reference', ref, set(CLASSES))
         lo, _, hi = sci['dayobs'].partition('-')
-        rlo, _, rhi = ref['dayobs'].partition('-')
-        if not ((rhi or rlo) < lo or rlo > (hi or lo)):
-            raise TargetError(f'{path}: the reference nights overlap the science nights')
+        for cls, r in list(ref.items()):
+            r = dict(r or {})
+            where = f'{path}: reference.{cls}'
+            _unknown(where, r, PART_KEYS['reference'])
+            r['dayobs'] = _dayobs(where, r.get('dayobs'))
+            if not r.get('camera'):
+                raise TargetError(f'{where}.camera (e.g. fa, fl, sq) is required')
+            r['frames'] = _path(base, r.get('frames')) or sci['frames']
+            rlo, _, rhi = r['dayobs'].partition('-')
+            if not ((rhi or rlo) < lo or rlo > (hi or lo)):
+                raise TargetError(f'{where}: the reference nights overlap the science nights')
+            ref[cls] = r
     t['reference'] = ref or None
     res = dict(t.get('resources') or {})
     _unknown(f'{path}: resources', res, RESOURCE_KEYS)
@@ -158,11 +182,21 @@ def in_range(dayobs, rng):
 
 
 def frames_for(t, part):
-    """Archive frame records of ``part`` ('science' | 'reference'), restricted to its DAY-OBS range."""
+    """Archive frame records of ``part`` ('science' | 'reference'), restricted to its DAY-OBS range(s) and, for the
+    reference, to each class's camera. Returns (frames, local folder or None)."""
+    if part == 'reference':
+        if not t['reference']:
+            raise TargetError(f"{t['file']}: no reference section")
+        frames, local = [], None
+        for cls, r in t['reference'].items():
+            fr, local = _frames(t, r)
+            frames += [f for f in fr if frame_class(f['filename']) == cls and r['camera'] in f['filename']]
+        return frames, local
+    return _frames(t, t['science'])
+
+
+def _frames(t, sel):
     import json
-    sel = t[part]
-    if sel is None:
-        raise TargetError(f"{t['file']}: no {part} section")
     src = sel['frames']
     if src == 'archive':
         from . import ingest

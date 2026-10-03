@@ -1,6 +1,6 @@
 # The recipe
 
-Generated from [pipeline/astra.yaml](../../pipeline/astra.yaml) by `python tools/docs/recipe_page.py`. 27 steps, 14 decisions. Step ids are `<stage>_<role>` (role: science, reference, difference); the deliverables are named for what they are.
+Generated from [pipeline/astra.yaml](../../pipeline/astra.yaml) by `python tools/docs/recipe_page.py`. 27 steps, 15 decisions. Step ids are `<stage>_<role>` (role: science, reference, difference); the deliverables are named for what they are.
 
 ## Steps
 
@@ -24,7 +24,7 @@ Generated from [pipeline/astra.yaml](../../pipeline/astra.yaml) by `python tools
 | `psf_reference` | psf | cosmic_reference, catalogs | psf_model, psf_auto_fix, max_apercorr, psf_nstars | PSF model and star photometry of the reference images (the difference images need both). |
 | `zcat_reference_bv` | zcat | psf_reference, catalogs | bv_catalog | Zero points of the B and V reference images (difference images normalised to the reference use them). |
 | `zcat_reference_gri` | zcat | psf_reference, catalogs | gri_catalog | Zero points of the g, r and i reference images. |
-| `diff_science` | diff | psf_science, zcat_science_bv, zcat_science_gri, psf_reference, zcat_reference_bv, zcat_reference_gri | diff_normalize, diff_register, diff_region, diff_gain | PyZOGY difference images, science minus reference (earliest reference per filter of the reference camera). |
+| `diff_science` | diff | psf_science, zcat_science_bv, zcat_science_gri, psf_reference, zcat_reference_bv, zcat_reference_gri | diff_reference_class, diff_normalize, diff_register, diff_region, diff_gain | PyZOGY difference images, science minus the reference of the same telescope class (earliest reference frame per filter); frames of a class without a reference are not subtracted. |
 | `psf_difference` | psf | diff_science |  | PSF of every difference image (needed by the transient photometry on it). |
 | `psfmag_difference` | psfmag | psf_difference | diff_bkg_order | Photometry of the transient on the difference images. |
 | `zcat_difference_bv` | zcat | psfmag_difference | bv_catalog, diff_phot_type | Zero points of the B and V difference images (from the star table of the image they are normalised to). |
@@ -94,6 +94,13 @@ Old pipeline default (--max_apercorr 0.1); a larger correction means the PSF doe
 
 - `apco_0p1` **(default)**: 0.1 mag
 - `apco_0p2`: 0.2 mag (looser)
+
+### `diff_reference_class`: Which reference a science frame may be subtracted with
+
+The manual chooses "the best one for each camera-filter combination" and lscloop's default reference camera is the science camera. A 1-m reference for 0.4-m frames (used in the SN 2024pxl validation runs; never in the published light curve, which is 1-m only) mixes pixel scales, PSFs and passbands.
+
+- `same` **(default)**: Same telescope class only; a class without a reference is not subtracted
+- `any`: Fall back to another class (1 m first); for tests, record why
 
 ### `diff_normalize`: Flux scale of the difference image
 

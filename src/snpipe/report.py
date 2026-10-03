@@ -77,8 +77,8 @@ def write(output, target_file=None):
     name = t['name'] if t else run.get('target', '?')
     L += [f'# Reduction report: {name}', '']
     if t:
-        ref = (f"reference DAY-OBS {t['reference']['dayobs']} (camera {t['reference']['camera']})" if t['reference']
-               else 'no reference (no subtraction)')
+        ref = ('references: ' + ', '.join(f"{c} DAY-OBS {r['dayobs']} ({r['camera']})" for c, r in t['reference'].items())
+               if t['reference'] else 'no reference (no subtraction)')
         L += [f"RA {float(t['ra']):.6f}, Dec {float(t['dec']):+.6f} · science DAY-OBS {t['science']['dayobs']} · "
               f"{ref} · workdir `{run.get('workdir', '')}`", '']
     code = run.get('code', {})

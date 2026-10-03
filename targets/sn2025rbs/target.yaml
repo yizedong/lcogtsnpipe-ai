@@ -10,9 +10,10 @@ workdir: ${SNPIPE_WORK}/sn2025rbs
 science:
   dayobs: 20250715-20260917              # everything before the reference night
   frames: ${SNPIPE_RAW}/2025rbs          # UBVgri 1m0, BVgri 0m4
-reference:
-  dayobs: 20260918
-  camera: fa                             # 1-m Sinistro (tfn1m001-fa20); 2 frames per filter
+reference:                               # one per telescope class; no 0.4-m reference exists
+  1m0:
+    dayobs: 20260918
+    camera: fa                             # 1-m Sinistro (tfn1m001-fa20); 2 frames per filter
 resources:
   jobs: 8
   diff_jobs: 3

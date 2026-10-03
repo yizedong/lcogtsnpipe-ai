@@ -12,10 +12,11 @@ workdir: ${SNPIPE_WORK}/sn2024pxl
 science:
   dayobs: 20240722-20241110
   frames: ${SNPIPE_RAW}/2024pxl_sel      # BgVri, 1m0 + 0m4 (rawdata/fetch.py)
-reference:
-  dayobs: 20180306                       # 2018-03-07 UTC; the frames were taken for SN 2017drh (same galaxy)
-  camera: fl                             # 1-m Sinistro fl05 at McDonald
-  frames: ${SNPIPE_RAW}/templates_2017drh
+reference:                               # one per telescope class; no 0.4-m reference exists
+  1m0:
+    dayobs: 20180306                       # 2018-03-07 UTC; the frames were taken for SN 2017drh (same galaxy)
+    camera: fl                             # 1-m Sinistro fl05 at McDonald
+    frames: ${SNPIPE_RAW}/templates_2017drh
 resources:
   jobs: 8
   diff_jobs: 2                           # PyZOGY needs ~7 GB per frame

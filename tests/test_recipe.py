@@ -75,7 +75,7 @@ def test_expand_fills_every_placeholder():
 
 def test_target_file_validation(tmp_path, monkeypatch):
     t = target.load(make_target(tmp_path))
-    assert t['name'] == '2099abc' and t['reference']['frames'] == t['science']['frames']
+    assert t['name'] == '2099abc' and t['reference']['1m0']['frames'] == t['science']['frames']
     with pytest.raises(target.TargetError):
         target.load(make_target(tmp_path / 'a', science={'dayobs': '2099-01-01', 'frames': 'archive'}))
     with pytest.raises(target.TargetError):
@@ -89,11 +89,11 @@ def test_frames_for_selects_dayobs(tmp_path):
     raw = tmp_path / 'raw'
     raw.mkdir()
     names = ['cpt1m012-fa06-20990105-0001-e91.fits.fz', 'cpt1m012-fa06-20990401-0001-e91.fits.fz',
-             'tfn1m001-fa20-20990601-0001-e91.fits.fz']
+             'tfn1m001-fa20-20990601-0001-e91.fits.fz', 'tfn0m414-sq31-20990601-0001-e91.fits.fz']
     (raw / 'frames.json').write_text(json.dumps([{'filename': n} for n in names]))
     t = target.load(make_target(tmp_path))
     assert [f['filename'] for f in target.frames_for(t, 'science')[0]] == names[:1]
-    assert [f['filename'] for f in target.frames_for(t, 'reference')[0]] == names[2:]
+    assert [f['filename'] for f in target.frames_for(t, 'reference')[0]] == names[2:3]   # 1m0 reference only
 
 
 def test_dry_run_does_not_touch_anything(tmp_path):
@@ -125,7 +125,7 @@ def test_schema_errors(tmp_path):
         with pytest.raises(target.TargetError):
             target.load(make_target(tmp_path / str(i), **over))
     old = make_target(tmp_path / 'old', reference=None, templates={'dayobs': '20990601', 'camera': 'fa'})
-    assert target.load(old)['reference']['camera'] == 'fa'                       # old key still accepted
+    assert target.load(old)['reference']['1m0']['camera'] == 'fa'                # old key still accepted
 
 
 def test_no_reference_keeps_report(tmp_path):
@@ -162,6 +162,7 @@ def test_cli_defaults_match_recipe_defaults():
     assert get('diff', '--region') == default['diff_region']
     assert get('diff', '--gain') == default['diff_gain']
     assert get('catalogs', '--sloan-source') == default['sloan_source']
+    assert get('diff', '--reference-class') == default['diff_reference_class']
 
 
 def test_step_ids_follow_stage_role():
@@ -173,3 +174,21 @@ def test_step_ids_follow_stage_role():
         stage, role = o['recipe']['command'].split()[1], o['id'].split('_', 1)[1]
         assert o['id'].startswith(stage + '_'), o['id']
         assert role.split('_')[0] in ('science', 'reference', 'difference'), o['id']
+
+
+def test_reference_per_class(tmp_path):
+    t = target.load(make_target(tmp_path / 'a', reference={'1m0': {'dayobs': '20990601', 'camera': 'fa'},
+                                                           '0m4': {'dayobs': '20990602', 'camera': 'sq'}}))
+    assert set(t['reference']) == {'1m0', '0m4'}
+    with pytest.raises(target.TargetError):          # not a telescope class
+        target.load(make_target(tmp_path / 'b', reference={'1m': {'dayobs': '20990601', 'camera': 'fa'}}))
+    with pytest.raises(target.TargetError):          # single reference with a camera of unknown class
+        target.load(make_target(tmp_path / 'c', reference={'dayobs': '20990601', 'camera': 'kb'}))
+
+
+def test_pick_reference_same_class_by_default():
+    from snpipe.diff import pick_reference
+    refs = {'1m0': {'dayobs': '20990601', 'camera': 'fa'}}
+    assert pick_reference('cpt1m012-fa06-20990105-0001-e91.fits', refs) == ('1m0', refs['1m0'])
+    assert pick_reference('tfn0m414-sq31-20990105-0001-e91.fits', refs) == ('0m4', None)
+    assert pick_reference('tfn0m414-sq31-20990105-0001-e91.fits', refs, 'any') == ('1m0', refs['1m0'])

@@ -10,6 +10,7 @@ decisions:
   psf_auto_fix: ladder
   psf_nstars: n6
   max_apercorr: apco_0p1
+  diff_reference_class: same
   diff_normalize: t
   diff_register: adaptive
   diff_region: full

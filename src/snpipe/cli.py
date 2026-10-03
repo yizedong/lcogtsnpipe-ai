@@ -169,6 +169,9 @@ def parser():
                            help='flux ratio science/reference: from the zero points (default) or the PyZOGY fit '
                                 '(old default, biased low: bug O01)')
             a.add_argument('--cutout-size', type=int, default=2048)
+            a.add_argument('--reference-class', choices=['same', 'any'], default='same',
+                           help="with --target-file: subtract only with a reference of the frame's own telescope "
+                                'class (same, the manual) or fall back to another class (any)')
         if stage in ('mag', 'getmag'):
             a.add_argument('--type', choices=['fit', 'ph', 'mag'], default=None,
                            help='fit = PSF, ph = aperture, mag = calibrated (getmag)')
@@ -322,8 +325,8 @@ def cmd_stage(args):
     apply_target(args)
     if args.jobs is None:
         args.jobs = 2 if args.cmd == 'diff' else 8
-    if args.cmd == 'diff' and args.tempdate is None:
-        raise TargetError('diff needs --tempdate (or a --target-file with a reference section)')
+    if args.cmd == 'diff' and args.tempdate is None and getattr(args, 'references', None) is None:
+        raise TargetError('diff needs --tempdate/--temptel (or a --target-file with a reference section)')
     frames = [r['filename'] for r in select_frames(args)]
     if not frames:
         report_result({'stage': args.cmd, 'status': 'skipped', 'n_frames': 0,
@@ -347,7 +350,8 @@ def cmd_stage(args):
     if args.cmd == 'diff':
         return run(execution.diff, args.jobs, tempdate=args.tempdate, temptel=args.temptel, normalize=args.normalize,
                    unmask=args.unmask, force=args.force, register_method=args.register, region=args.region,
-                   cutout_size=args.cutout_size, gain=args.gain)
+                   cutout_size=args.cutout_size, gain=args.gain, references=getattr(args, 'references', None),
+                   reference_class=args.reference_class)
     if args.cmd == 'zcat':
         # zcat reads the other filters of the night from the database: serial, like lscloop
         return run(execution.zcat, 1, field=args.field, catalogue=args.catalogue, fix=not args.unfix,

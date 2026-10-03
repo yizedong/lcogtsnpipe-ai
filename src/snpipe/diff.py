@@ -143,10 +143,33 @@ def find_template(row, tempdate, temptel, conn=None):
     return rows[0] if rows else None
 
 
+def pick_reference(frame, references, reference_class='same'):
+    """The reference of the frame's telescope class; with reference_class 'any' another class's if its own has none
+    (1m0 first). Returns (class, {dayobs, camera}) or (class, None)."""
+    from .target import frame_class
+    cls = frame_class(frame)
+    if references.get(cls):
+        return cls, references[cls]
+    if reference_class == 'any':
+        for c in ('1m0', '2m0', '0m4'):
+            if references.get(c):
+                return c, references[c]
+    return cls, None
+
+
 def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unmask=False, force=False,
-            register_method='adaptive', region='full', cutout_size=2048, gain='zeropoint', conn=None):
+            register_method='adaptive', region='full', cutout_size=2048, gain='zeropoint', references=None,
+            reference_class='same', conn=None):
     t0 = time.time()
     row = db.get_frame(frame, conn)
+    if references is not None:          # from a target file: one reference per telescope class
+        cls, ref = pick_reference(frame, references, reference_class)
+        if ref is None:
+            qa = FrameQA(frame, 'diff')
+            qa.status = 'skipped'
+            qa.messages.append(f'no reference for this telescope class ({cls}): not subtracted')
+            return qa
+        tempdate, temptel = ref['dayobs'], ref['camera']
     tag = ('.cut' if region == 'cutout' else '') + ('.fit' if gain == 'fit' else '')
     # a non-default variant keeps its own QA file (<frame>.diff.fit.qa.json), never the default's
     qa = FrameQA(frame, 'diff' + tag)
@@ -271,7 +294,7 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
             msg = '; '.join([f'{type(e).__name__}: {e}'] + records[-3:])
             if not unmask:  # manual: "most of these issues are solved by adding the --unmask flag"
                 q2 = run_one(frame, tempdate, temptel, normalize, True, force, register_method, region, cutout_size,
-                             gain, conn)
+                             gain, conn=conn)
                 q2.messages.insert(0, f'first attempt failed ({msg}) -> retried with unmask (manual remedy)')
                 return q2
             return qa.fail(f'PyZOGY failed: {msg}')

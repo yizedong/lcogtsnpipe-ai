@@ -185,12 +185,15 @@ outputs:
 - id: diff_science
   type: metric
   format: json
-  description: PyZOGY difference images, science minus reference (earliest reference per filter of the reference camera).
+  description: >-
+    PyZOGY difference images, science minus the reference of the same telescope class (earliest reference frame
+    per filter); frames of a class without a reference are not subtracted.
   inputs: [target, psf_science, zcat_science_bv, zcat_science_gri, psf_reference, zcat_reference_bv, zcat_reference_gri]
-  decisions: [diff_normalize, diff_register, diff_region, diff_gain]
+  decisions: [diff_reference_class, diff_normalize, diff_register, diff_region, diff_gain]
   recipe:
     command: >-
-      snpipe diff --target-file {inputs.target} --normalize {decisions.diff_normalize}
+      snpipe diff --target-file {inputs.target} --reference-class {decisions.diff_reference_class}
+      --normalize {decisions.diff_normalize}
       --register {decisions.diff_register} --region {decisions.diff_region} --gain {decisions.diff_gain}
       --qa-out {output}
 - id: psf_difference
@@ -329,6 +332,16 @@ decisions:
     options:
       apco_0p1: {label: 0.1 mag}
       apco_0p2: {label: 0.2 mag (looser)}
+  diff_reference_class:
+    label: Which reference a science frame may be subtracted with
+    default: same
+    rationale: >-
+      The manual chooses "the best one for each camera-filter combination" and lscloop's default reference camera is
+      the science camera. A 1-m reference for 0.4-m frames (used in the SN 2024pxl validation runs; never in the
+      published light curve, which is 1-m only) mixes pixel scales, PSFs and passbands.
+    options:
+      same: {label: Same telescope class only; a class without a reference is not subtracted}
+      any: {label: 'Fall back to another class (1 m first); for tests, record why'}
   diff_normalize:
     label: Flux scale of the difference image
     default: t

@@ -33,10 +33,12 @@ workdir: ${SNPIPE_WORK}/sn2025rbs   # working directory: database, frames, produ
 science:
   dayobs: 20250715-20260917         # DAY-OBS range of the frames to reduce
   frames: ${SNPIPE_RAW}/2025rbs     # folder with frames.json and the files, or "archive"
-reference:                          # optional: without it there is no subtraction
-  dayobs: 20260918                  # DAY-OBS of the reference (template) night: one night or a range
-  camera: fa                        # camera prefix of the reference frames
-  frames: ${SNPIPE_RAW}/2025rbs     # optional: default = science.frames
+reference:                          # optional: one entry per telescope class (1m0, 0m4, 2m0)
+  1m0:
+    dayobs: 20260918                # DAY-OBS of that class's reference (template) night: one night or a range
+    camera: fa                      # camera prefix of the reference frames
+    frames: ${SNPIPE_RAW}/2025rbs   # optional: default = science.frames
+  # 0m4: {dayobs: ..., camera: sq}  # a class without a reference is not subtracted
 resources:
   jobs: 8                           # frames processed in parallel by most stages
   diff_jobs: 2                      # frames in parallel in difference imaging (~7 GB memory each)
@@ -53,16 +55,22 @@ resources:
 ### The reference frames
 
 Difference imaging subtracts a reference image (the old pipeline calls it a *template*) taken when the transient
-was not there: before explosion, or long after it faded. Without a `reference` section the run stops after the
-unsubtracted light curve (host light included) and still writes the review queue and the report.
+was not there: before explosion, or long after it faded. As in the manual ("choose the best one for each
+camera-filter combination"), every telescope class has its own reference: 1-m frames are subtracted with a 1-m
+reference, 0.4-m frames with a 0.4-m reference. A class without a reference is not subtracted; its frames still
+have unsubtracted magnitudes (host light included). Without any `reference` section the run stops after the
+unsubtracted light curve and still writes the review queue and the report.
 
-* `reference.dayobs` and `reference.camera` select the reference frames: every frame of that night taken with that
-  camera (`fa` = 1-m Sinistro, `fl` = older 1-m Sinistro, `sq` = 0.4-m QHY, `ep` = MuSCAT). For each filter the
-  earliest frame is used for every science frame of that filter, from any telescope.
+* `reference.<class>.dayobs` and `.camera` select that class's reference frames: every frame of those nights taken
+  with that camera. For each filter the earliest one is used for all science frames of that class and filter.
+* A single reference (`reference: {dayobs: ..., camera: fa}`) is accepted and applies to its camera's class.
 * Reference frames often belong to another object in the archive (for 2024pxl they were taken for SN 2017drh in the
   same galaxy). That does not matter: the frames listed for this target are attached to it whatever their OBJECT.
-* Filters without a reference frame get no difference images (their frames still get unsubtracted magnitudes).
-* U band needs Landolt standard-star nights to calibrate (no all-sky U catalog); see the U-band guide when it lands.
+* Subtracting one class with another class's reference (decision `diff_reference_class: any`) is possible for
+  tests only; the 2024pxl validation runs did so for 0.4-m frames, the published light curve did not (1-m only).
+* Archival survey references (SDSS, PS1), which the manual uses when no LCO reference exists, are not supported
+  yet.
+* U band needs Landolt standard-star nights to calibrate (no all-sky U catalog).
 
 ### frames.json and local frames
 

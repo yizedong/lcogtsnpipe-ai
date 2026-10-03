@@ -20,18 +20,16 @@ def apply_target(args):
     part = getattr(args, 'frames', None) or 'science'
     if part != 'science' and not t['reference']:
         raise target.TargetError(f"{t['file']}: no reference section, so there are no reference frames")
-    sel = t[part]
     if getattr(args, 'name', 'x') is None:
         args.name = t['name']
-    if getattr(args, 'epoch', 'x') is None:
-        args.epoch = sel['dayobs']
-    if t['reference']:
-        if getattr(args, 'tempdate', 'x') in (None, ''):
-            args.tempdate = t['reference']['dayobs']
-        if getattr(args, 'temptel', 'x') in (None, ''):
-            args.temptel = t['reference']['camera']
-    if part == 'reference' and getattr(args, 'telescope', 'x') is None:
-        args.telescope = sel['camera']          # only the reference camera's frames of that night
+    if part == 'reference':
+        # every class's reference night, only that class's reference camera
+        if getattr(args, 'epoch', 'x') is None and getattr(args, 'telescope', 'x') is None:
+            args.refsets = [(cls, r['dayobs'], r['camera']) for cls, r in t['reference'].items()]
+    elif getattr(args, 'epoch', 'x') is None:
+        args.epoch = t['science']['dayobs']
+    if args.cmd == 'diff' and getattr(args, 'tempdate', None) in (None, '') and not getattr(args, 'temptel', ''):
+        args.references = t['reference'] or {}  # each science frame: the reference of its telescope class
     if getattr(args, 'jobs', 'x') is None:
         args.jobs = t['resources']['diff_jobs' if args.cmd == 'diff' else 'jobs']
     return t
@@ -51,6 +49,13 @@ def select_frames(args, conn=None):
         e = args.epoch.split('-')
         sql += 'AND p.dayobs>=? AND p.dayobs<=? '
         params += [e[0], e[-1]]
+    if getattr(args, 'refsets', None):
+        ors = []
+        for cls, rng, cam in args.refsets:
+            e = rng.split('-')
+            ors.append('(p.dayobs>=? AND p.dayobs<=? AND substr(p.filename, 4, 3)=? AND p.filename LIKE ?)')
+            params += [e[0], e[-1], cls, f'%-{cam}%']
+        sql += f"AND ({' OR '.join(ors)}) "
     if getattr(args, 'filter', None):
         fl = []
         for f in args.filter:
