@@ -190,7 +190,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** None: no delete verdict was ever given on 2024pxl. Tested on dummy files: the science frame is refused; deleting the diff keeps the science image and other variants.
 
 ### B15 — A changed choice or target re-ran a step, but its stages reused their cached products
-*run / stages · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+*run / stages · snpipe only · 2026-10-03 · fix [`9333d84`](https://github.com/yizedong/lcogtsnpipe-ai/commit/9333d84) · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
 
 - **Where:** run.py, cli.py, catalogs.py
 - **What was wrong:** Stages skip frames whose products exist ('psf already calculated'); the recipe never forces, so after changing e.g. the number of PSF stars or the reference night the executor re-ran the step and recorded the new configuration over the old products. catalogs --force only retried empty catalogs.
@@ -199,7 +199,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** None on the runs so far (no configuration was changed in place).
 
 ### B16 — A corrected target position never reached the database
-*add-target · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+*add-target · snpipe only · 2026-10-03 · fix [`9333d84`](https://github.com/yizedong/lcogtsnpipe-ai/commit/9333d84) · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
 
 - **Where:** ingest.add_target, cli.py
 - **What was wrong:** An existing target kept its old coordinates; add-target still reported the new ones.
@@ -208,7 +208,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** None so far.
 
 ### B17 — Survey reference noise header in the wrong units
-*survey · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+*survey · snpipe only · 2026-10-03 · fix [`9333d84`](https://github.com/yizedong/lcogtsnpipe-ai/commit/9333d84) · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
 
 - **Where:** survey.py
 - **What was wrong:** RDNOISE held the sky RMS in image units, but the psf noise model reads it in electrons (variance = data/GAIN + (RDNOISE/GAIN)^2).
@@ -217,7 +217,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** Found before any production use of survey references.
 
 ### B18 — A target with only survey references stopped at the B/V reference zero points
-*recipe · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+*recipe · snpipe only · 2026-10-03 · fix [`9333d84`](https://github.com/yizedong/lcogtsnpipe-ai/commit/9333d84) · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
 
 - **Where:** cli.py cmd_stage
 - **What was wrong:** PS1/SDSS have no B or V; the B/V reference zcat selected nothing and exited 3 (missing input), blocking the subtraction.
@@ -226,7 +226,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** Found before production use.
 
 ### B19 — Chosen subtraction variants were invisible to the later steps
-*selection / recipe · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+*selection / recipe · snpipe only · 2026-10-03 · fix [`9333d84`](https://github.com/yizedong/lcogtsnpipe-ai/commit/9333d84) · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
 
 - **Where:** selection.py, astra.yaml
 - **What was wrong:** Variants (.fit = PyZOGY gain fit, .cut = cutout) and cross-class differences were never selected downstream, even when the universe chose them.
@@ -235,7 +235,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** None on baseline runs.
 
 ### B20 — Per-class reference folders collapsed into the last one
-*ingest · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+*ingest · snpipe only · 2026-10-03 · fix [`9333d84`](https://github.com/yizedong/lcogtsnpipe-ai/commit/9333d84) · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
 
 - **Where:** target.frames_for, ingest.run
 - **What was wrong:** frames_for concatenated all classes' frame records but returned only the last folder.
@@ -244,7 +244,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** None (both examples have one reference class).
 
 ### B21 — A failed survey reference was ignored when LCO references were also present
-*ingest · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+*ingest · snpipe only · 2026-10-03 · fix [`9333d84`](https://github.com/yizedong/lcogtsnpipe-ai/commit/9333d84) · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
 
 - **Where:** cli.py cmd_ingest
 - **What was wrong:** The exit code only considered survey errors when there were no LCO reference frames.
@@ -253,7 +253,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** None so far.
 
 ### B22 — Missing star table of a difference image silently brought back the wrong extinction (B01)
-*mag · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+*mag · snpipe only · 2026-10-03 · fix [`9333d84`](https://github.com/yizedong/lcogtsnpipe-ai/commit/9333d84) · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
 
 - **Where:** mag.py
 - **What was wrong:** Without the difference image's sn2 header, mag fell back to the science frame's site and airmass.
@@ -262,7 +262,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** None (all sn2 files present).
 
 ### B23 — The subtraction noise check disappeared when no flux ratio was known
-*diff · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+*diff · snpipe only · 2026-10-03 · fix [`9333d84`](https://github.com/yizedong/lcogtsnpipe-ai/commit/9333d84) · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
 
 - **Where:** diff.py
 - **What was wrong:** With no zero points and no field-star ratio, the expected noise was undefined and the check was skipped silently.
@@ -271,7 +271,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** None observed.
 
 ### B24 — Difference-image apertures from the reference's seeing only
-*psfmag · snpipe only · 2026-10-03 · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
+*psfmag · snpipe only · 2026-10-03 · fix [`9333d84`](https://github.com/yizedong/lcogtsnpipe-ai/commit/9333d84) · found by: Codex review (reviews/codex/review_5_pipeline.md), verified*
 
 - **Where:** psfmag.py
 - **What was wrong:** The aperture radius used the reference's FWHM; a difference image's PSF is about the broader of the two images' (a sharp survey reference with a 2.5" science frame: 3 x 1.2" = 1.4 science FWHM, a few % of the flux lost).
