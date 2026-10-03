@@ -221,13 +221,13 @@
       "status": "open",
       "origin": "old",
       "stage": "diff",
-      "found_by": "Codex review (review_1.md #5), verified",
+      "found_by": "Codex review (review_1.md #5); confirmed and measured by the SN 2025rbs diagnosis (reviews/diag_2025rbs_diff.md)",
       "title": "Template PSF is not transformed to the science pixel grid",
       "where": "diff.py (old: lscdiff.py)",
       "what": "The template is resampled onto the science grid, but PyZOGY gets the template PSF in native template pixels.",
-      "why": "Different pixel scale (0.387 vs 0.74 \"/px for 0.4 m science with a 1 m template) or rotation changes the effective PSF.",
-      "fix": "Measure the PSF on the registered template (or transform it through the same registration).",
-      "effect": "Not measured. Could matter for the 47 difference points from 0.4 m cameras."
+      "why": "PyZOGY receives a reference PSF 1.9x too wide when a 1-m reference (0.389\"/px) is subtracted from 0.4-m science (0.74\"/px). Its flux-ratio (gain) fit then comes out 10-30% low (rerun on 2025rbs frames: 0.187 vs 0.229 true), so the transient is too bright by 0.06-0.36 mag and an uncancelled fraction of the host is added (up to 1-2 mag late for the bright 2025rbs host). Even on 1-m frames the iterative fit is 1-6% low.",
+      "fix": "Resample the reference PSF to the science pixel scale before PyZOGY; set the flux ratio from the zero points (matches the field-star ratio within 2%) or flag |fit/zero-point - 1| > 3% (choice pending). Note: this reverses the reading of the earlier diff_gain=zeropoint test (the zero-point ratio was right, the fit biased).",
+      "effect": "2025rbs: 0.4-m difference magnitudes 0.4-1.6 mag brighter than the unsubtracted ones (impossible); 1-m non-tfn sites -0.02..-0.08. 2024pxl: same bias, smaller host; the published light curve (old pipeline, same bug) probably carries it on 0.4-m points. Not yet re-measured after a fix."
     },
     {
       "id": "O02",
