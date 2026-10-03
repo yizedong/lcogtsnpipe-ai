@@ -74,6 +74,8 @@ unsubtracted light curve and still writes the review queue and the report.
   stack cutout (PS1) or the fields of one SDSS night covering the science field, masks bad pixels, keeps the host
   (no background subtraction), registers it once onto each science frame, and takes the flux ratio from the field
   stars. B, V, U frames cannot use a survey reference. A failed download stops the step with exit 4 (rerun later).
+  **Status: experimental, not validated** (open items O13, O14 in [bugs.md](../reference/bugs.md)); do not use it
+  for science yet.
 * U band needs Landolt standard-star nights to calibrate (no all-sky U catalog).
 
 ### frames.json and local frames

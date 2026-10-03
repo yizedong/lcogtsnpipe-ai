@@ -1,6 +1,6 @@
 # Bugs fixed, and why
 
-32 fixed (5 of them inherited from the old pipeline), 12 open, 2 checked and not bugs. Generated from [bugs.json](bugs.json) by `tools/docs/bugs_page.py`; other deliberate differences from the old pipeline are in [compatibility.md](compatibility.md).
+32 fixed (5 of them inherited from the old pipeline), 13 open, 2 checked and not bugs. Generated from [bugs.json](bugs.json) by `tools/docs/bugs_page.py`; other deliberate differences from the old pipeline are in [compatibility.md](compatibility.md).
 
 | id | status | origin | stage | bug |
 |---|---|---|---|---|
@@ -48,6 +48,7 @@
 | O11 | open | documentation | report | Report claims stronger than the evidence |
 | O12 | open | also in the old pipeline | zcat | Cloudy frames are not flagged: no check on the zero point itself |
 | O13 | open | snpipe only | diff (survey references) | With PS1 references the field stars are over-subtracted by 2-7% |
+| O14 | open | snpipe only | psf (survey references) | PS1 references: the PSF stage finds no PSF stars in r and i; survey references not usable yet |
 | N01 | not-a-bug | also in the old pipeline | zcat | zcat 'module-global keep' |
 | N02 | not-a-bug | snpipe only | tools | compare.py could pair different stars by row index |
 
@@ -460,6 +461,15 @@ Checked to be real; effect on SN 2024pxl given.
 - **Why it matters:** The transient and the host are then scaled a few % wrong; survey references are not validated until this is understood.
 - **Proposed fix:** To find: passband mismatch PS1 vs LCO (colour-dependent ratio; fit the ratio vs colour), PSF mismatch between the 1.2" stack and 2" LCO frames, or the ratio estimate (aperture magnitudes). Measure on the full 2025rbs 1-m set.
 - **Effect on SN 2024pxl:** Not yet measured on light curves.
+
+### O14 — PS1 references: the PSF stage finds no PSF stars in r and i; survey references not usable yet
+*psf (survey references) · snpipe only · found by: SN 2025rbs PS1-reference test runs (4 rounds, 2026-10-03 night)*
+
+- **Where:** survey.py (SATURATE, FWHM), psf.py star selection
+- **What was wrong:** With SATURATE = median of STARCORE pixels (94e5378) the psf stage reports "no PSF stars" for the r and i PS1 stacks (r passes only on the catalog retry, i fails); with 1.01 x max it picked saturated stars; with the 5th percentile of SAT|STARCORE (~1,200 counts) nothing passed. g works (apco -0.04). The r subtractions then remove ~100% of the field-star flux (flux ratio wildly off).
+- **Why it matters:** Survey references cannot be used until the reference PSF and the star selection work on survey stacks.
+- **Proposed fix:** Look at the psf stage's star selection on a deep, sky-subtracted 0.25"/px stack (datamin/datamax, sharpness, isolation, catalog choice): probably needs survey-specific limits; then revisit O13.
+- **Effect on SN 2024pxl:** PS1 support (code, recipe option, docs) is in place but not validated; do not use it for science yet.
 
 
 ## Checked and not bugs

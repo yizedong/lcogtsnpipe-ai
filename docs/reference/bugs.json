@@ -642,6 +642,19 @@
       "effect": "Not yet measured on light curves."
     },
     {
+      "id": "O14",
+      "status": "open",
+      "origin": "new",
+      "stage": "psf (survey references)",
+      "found_by": "SN 2025rbs PS1-reference test runs (4 rounds, 2026-10-03 night)",
+      "title": "PS1 references: the PSF stage finds no PSF stars in r and i; survey references not usable yet",
+      "where": "survey.py (SATURATE, FWHM), psf.py star selection",
+      "what": "With SATURATE = median of STARCORE pixels (94e5378) the psf stage reports \"no PSF stars\" for the r and i PS1 stacks (r passes only on the catalog retry, i fails); with 1.01 x max it picked saturated stars; with the 5th percentile of SAT|STARCORE (~1,200 counts) nothing passed. g works (apco -0.04). The r subtractions then remove ~100% of the field-star flux (flux ratio wildly off).",
+      "why": "Survey references cannot be used until the reference PSF and the star selection work on survey stacks.",
+      "fix": "Look at the psf stage's star selection on a deep, sky-subtracted 0.25\"/px stack (datamin/datamax, sharpness, isolation, catalog choice): probably needs survey-specific limits; then revisit O13.",
+      "effect": "PS1 support (code, recipe option, docs) is in place but not validated; do not use it for science yet."
+    },
+    {
       "id": "N01",
       "status": "not-a-bug",
       "origin": "old",
