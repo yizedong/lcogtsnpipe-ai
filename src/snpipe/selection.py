@@ -5,9 +5,9 @@ stage default applies.
 """
 from . import db, qa, sites
 
-# products of non-default diff options (.zp = --gain zeropoint, .cut = --region cutout) are tests: selected only
-# when listed in --frames-file, so they never enter a default light curve twice
-TEST_PRODUCTS = ('.zp.diff', '.cut.diff', '.cut.zp.diff')
+# products of non-default diff options (.fit = --gain fit, .cut = --region cutout; .zp = zero-point gain when it
+# was still a test option) are variants: selected only when listed in --frames-file, never twice in a light curve
+TEST_PRODUCTS = ('.fit.diff', '.zp.diff', '.cut.diff', '.cut.zp.diff', '.cut.fit.diff')
 
 
 def apply_target(args):

@@ -399,7 +399,7 @@ difference images: science minus reference (PyZOGY)
 ```
 snpipe diff [-h] [--target-file TARGET_FILE] [--frames {science,reference}] [-n NAME] [-e EPOCH] [-f FILTER [FILTER ...]] [-T TELESCOPE] [-d ID]
                    [-b BAD] [--filetype FILETYPE] [--frames-file FRAMES_FILE] [-F] [-j JOBS] [--qa-out QA_OUT] [--tempdate TEMPDATE]
-                   [--temptel TEMPTEL] [--normalize {t,i}] [--unmask] [--register REGISTER] [--region {full,cutout}] [--gain {fit,zeropoint}]
+                   [--temptel TEMPTEL] [--normalize {t,i}] [--unmask] [--register REGISTER] [--region {full,cutout}] [--gain {zeropoint,fit}]
                    [--cutout-size CUTOUT_SIZE]
 
 options:
@@ -413,8 +413,8 @@ options:
   --unmask
   --register REGISTER   adaptive | exact | bilinear | bicubic
   --region {full,cutout}
-  --gain {fit,zeropoint}
-                        flux ratio: PyZOGY iterative fit (old default) or from the zero points
+  --gain {zeropoint,fit}
+                        flux ratio science/reference: from the zero points (default) or the PyZOGY fit (old default, biased low: bug O01)
   --cutout-size CUTOUT_SIZE
 
 frame selection:

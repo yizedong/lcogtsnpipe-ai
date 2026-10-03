@@ -114,6 +114,12 @@ def run_one(frame, conn=None, redo=False, ra=None, dec=None, **kw):
     else:
         apco0 = float(hdr2.get('APCO') or 0.)
     scale = float(hdr2['PIXSCALE']) if 'PIXSCALE' in hdr2 else float(hdr2['CCDSCALE'])
+    if 'diff' in frame and 'optimal' in frame:
+        # a difference image is on the science pixel grid while its star table (and PIXSCALE) is the
+        # reference's: convert the FWHM with the image's own scale (old code: reference scale, 1.9x too large
+        # apertures on 0.4-m differences with a 1-m reference)
+        from .psf import pixscale
+        scale = pixscale(hdr)
     f0 = float(hdr2.get('PSF_FWHM') or 0) / scale or 6.
     if ra is None:
         t = db.target_info(row['targetid'], conn)

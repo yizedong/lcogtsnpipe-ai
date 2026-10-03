@@ -24,7 +24,7 @@ Generated from [pipeline/astra.yaml](../../pipeline/astra.yaml) by `python tools
 | `psf_reference` | psf | cosmic_reference, catalogs | psf_model, psf_auto_fix, max_apercorr, psf_nstars | PSF model and star photometry of the reference images (the difference images need both). |
 | `zcat_reference_bv` | zcat | psf_reference, catalogs | bv_catalog | Zero points of the B and V reference images (difference images normalised to the reference use them). |
 | `zcat_reference_gri` | zcat | psf_reference, catalogs | gri_catalog | Zero points of the g, r and i reference images. |
-| `diff_science` | diff | psf_science, psf_reference, zcat_reference_bv, zcat_reference_gri | diff_normalize, diff_register, diff_region, diff_gain | PyZOGY difference images, science minus reference (earliest reference per filter of the reference camera). |
+| `diff_science` | diff | psf_science, zcat_science_bv, zcat_science_gri, psf_reference, zcat_reference_bv, zcat_reference_gri | diff_normalize, diff_register, diff_region, diff_gain | PyZOGY difference images, science minus reference (earliest reference per filter of the reference camera). |
 | `psf_difference` | psf | diff_science |  | PSF of every difference image (needed by the transient photometry on it). |
 | `psfmag_difference` | psfmag | psf_difference | diff_bkg_order | Photometry of the transient on the difference images. |
 | `zcat_difference_bv` | zcat | psfmag_difference | bv_catalog, diff_phot_type | Zero points of the B and V difference images (from the star table of the image they are normalised to). |
@@ -119,10 +119,10 @@ The old pipeline subtracts the full frame. A 2048x2048 cutout around the target 
 
 ### `diff_gain`: Flux ratio between science and reference
 
-Old default: PyZOGY fits it iteratively from stars in common. The ratio from the zero points is about 4x faster but gave SN magnitudes 0.06 +- 0.04 mag fainter on 21 frames of 2024pxl (up to +0.2 on 0.4 m g/r/i); it rescued 1 of 7 frames where the fit failed.
+The ratio from the two images' zero points matches the ratio measured on the field stars within 2% (SN 2025rbs). PyZOGY's iterative fit, the old default, is biased low: by 10-30% on 0.4-m frames when the reference PSF was not resampled (bug O01), and by 1-6% even on 1-m frames; with a bright host this leaves uncancelled host light (0.4-1.6 mag on 2025rbs). The field-star ratio is measured on every frame as a check (warn above 3%).
 
-- `fit` **(default)**: PyZOGY iterative fit (old pipeline)
-- `zeropoint`: From the photometric zero points (fallback)
+- `zeropoint` **(default)**: From the photometric zero points (field stars if a zero point is missing)
+- `fit`: PyZOGY iterative fit (old pipeline; biased)
 
 ### `diff_bkg_order`: Order of the background surface fitted around the transient on difference images
 

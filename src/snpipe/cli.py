@@ -165,8 +165,9 @@ def parser():
             a.add_argument('--unmask', action='store_true')
             a.add_argument('--register', default='adaptive', help='adaptive | exact | bilinear | bicubic')
             a.add_argument('--region', choices=['full', 'cutout'], default='full')
-            a.add_argument('--gain', choices=['fit', 'zeropoint'], default='fit',
-                           help='flux ratio: PyZOGY iterative fit (old default) or from the zero points')
+            a.add_argument('--gain', choices=['zeropoint', 'fit'], default='zeropoint',
+                           help='flux ratio science/reference: from the zero points (default) or the PyZOGY fit '
+                                '(old default, biased low: bug O01)')
             a.add_argument('--cutout-size', type=int, default=2048)
         if stage in ('mag', 'getmag'):
             a.add_argument('--type', choices=['fit', 'ph', 'mag'], default=None,

@@ -156,7 +156,7 @@ def diff_image_of(frame, conn=None):
     if '.diff.' in frame:
         return frame
     rows = db.query('SELECT nameout FROM photpairing WHERE namein=?', (frame,), conn)
-    names = [r['nameout'] for r in rows if not any(t in r['nameout'] for t in ('.zp.', '.cut.'))]
+    names = [r['nameout'] for r in rows if not any(t in r['nameout'] for t in ('.zp.', '.cut.', '.fit.'))]
     return names[0] if names else None
 
 

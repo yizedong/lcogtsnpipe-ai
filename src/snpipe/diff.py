@@ -87,6 +87,53 @@ def register(template, tmask, thdr, target_hdr, shape, method='adaptive'):
     return data, mask, foot
 
 
+def _overlap(n_in, s_in, n_out, s_out):
+    """1-D area-overlap matrix W (n_out x n_in): fraction of each input pixel inside each output pixel, both grids
+    centred on the same point; pixel sizes s_in, s_out (arcsec)."""
+    ei = (np.arange(n_in + 1) - n_in / 2) * s_in
+    eo = (np.arange(n_out + 1) - n_out / 2) * s_out
+    lo = np.maximum(eo[:-1, None], ei[None, :-1])
+    hi = np.minimum(eo[1:, None], ei[None, 1:])
+    return np.clip(hi - lo, 0, None) / s_in
+
+
+def rebin_psf(img, scale_in, scale_out):
+    """A PSF image sampled at ``scale_in`` ("/px) re-sampled to ``scale_out`` by exact area overlap: flux
+    conserving, centred, odd size. PyZOGY needs both PSFs on the pixel grid of the (registered) images; the old
+    code passed the reference PSF in its own pixels (bug O01: 1.9x too wide for a 1-m reference of a 0.4-m frame,
+    flux-ratio fit 10-30% low)."""
+    if abs(scale_in / scale_out - 1) < 0.01:
+        return img
+    n_in = img.shape[0]
+    n_out = int(np.ceil(n_in * scale_in / scale_out)) | 1
+    w = _overlap(n_in, scale_in, n_out, scale_out)
+    out = w @ img @ w.T
+    return out * (img.sum() / out.sum())
+
+
+def star_flux_ratio(sci_sn2, ref_sn2, t_sci, t_ref, radius=1.0, max_err=0.03):
+    """Flux ratio science/reference (counts) from the same field stars in both star tables (aperture magnitudes
+    per second): (t_sci/t_ref) 10^(-0.4 median(m_sci - m_ref)). Independent of PSFs and zero points."""
+    from astropy.coordinates import SkyCoord
+    import astropy.units as u
+    tabs = []
+    for f in (sci_sn2, ref_sn2):
+        with fits.open(f) as h:
+            d = h[1].data
+            m, e = np.asarray(d['magp3'], float), np.asarray(d['merrp3'], float)
+            k = np.isfinite(m) & np.isfinite(e) & (m < 90) & (e < max_err)
+            tabs.append((SkyCoord(np.asarray(d['ra0'], float)[k], np.asarray(d['dec0'], float)[k], unit='deg'), m[k]))
+    (cs, ms), (cr, mr) = tabs
+    if len(ms) < 5 or len(mr) < 5:
+        return None, 0
+    idx, sep, _ = cs.match_to_catalog_sky(cr)
+    ok = sep < radius * u.arcsec
+    if ok.sum() < 5:
+        return None, int(ok.sum())
+    dm = ms[ok] - mr[idx[ok]]
+    return float(t_sci / t_ref * 10 ** (-0.4 * np.median(dm))), int(ok.sum())
+
+
 def find_template(row, tempdate, temptel, conn=None):
     d1, d2 = tempdate.split('-')[0], tempdate.split('-')[-1]
     f1 = sites.filterst1.get(row['filter'])
@@ -97,11 +144,11 @@ def find_template(row, tempdate, temptel, conn=None):
 
 
 def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unmask=False, force=False,
-            register_method='adaptive', region='full', cutout_size=2048, gain='fit', conn=None):
+            register_method='adaptive', region='full', cutout_size=2048, gain='zeropoint', conn=None):
     t0 = time.time()
     row = db.get_frame(frame, conn)
-    tag = ('.cut' if region == 'cutout' else '') + ('.zp' if gain == 'zeropoint' else '')
-    # a non-default variant keeps its own QA file (<frame>.diff.zp.qa.json), never the default's
+    tag = ('.cut' if region == 'cutout' else '') + ('.fit' if gain == 'fit' else '')
+    # a non-default variant keeps its own QA file (<frame>.diff.fit.qa.json), never the default's
     qa = FrameQA(frame, 'diff' + tag)
     img = Path(row['filepath']) / frame
     temptel = temptel or row['instrument'][:2]
@@ -156,17 +203,37 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     t1 = time.time()
     rdata, rmask, foot = register(tdata, tmask, thdr, hdr, data.shape, register_method)
     t_reg = time.time() - t1
-    # gain_ratio: PyZOGY's iterative flux-scale fit (old default), or from the photometric zero points
-    # (ASTRA decision diff_gain=zeropoint): F_sci/F_ref = (t_sci/t_ref) 10^(0.4 (zn_sci - zn_ref)), zn = zcat's
-    # natural-system zero point (catalogue mag minus raw instrumental mag per second)
+    # flux ratio science/reference (decision diff_gain). zeropoint (default): F = (t_sci/t_ref) 10^(0.4 (zn_sci -
+    # zn_ref)), zn = zcat's natural-system zero point; if a zero point is missing, the same ratio measured on the
+    # field stars of both star tables; fit: PyZOGY's iterative fit (old default; biased low, bug O01).
+    # The field-star ratio is always measured as an independent check of the ratio used.
+    t_sci, t_ref = float(readkey(hdr, 'exptime')), float(readkey(thdr, 'exptime'))
+    f_stars, n_stars = None, 0
+    sci_sn2, ref_sn2 = Path(str(img).replace('.fits', '.sn2.fits')), Path(str(timg).replace('.fits', '.sn2.fits'))
+    if sci_sn2.exists() and ref_sn2.exists():
+        try:
+            f_stars, n_stars = star_flux_ratio(sci_sn2, ref_sn2, t_sci, t_ref)
+        except Exception as e:
+            qa.messages.append(f'field-star flux ratio failed: {type(e).__name__}: {e}')
+    qa.metrics.update(gain_ratio_stars=f_stars, gain_ratio_stars_n=n_stars)
     gain_ratio = np.inf
     if gain == 'zeropoint':
         zs, zr = row.get('zn'), trow.get('zn')
-        if zs is None or zr is None or zs >= 9999 or zr >= 9999:
-            qa.messages.append('zero point missing (run zcat on target and template) -> PyZOGY gain fit used')
-        else:
-            gain_ratio = float(readkey(hdr, 'exptime')) / float(readkey(thdr, 'exptime')) * 10 ** (0.4 * (zs - zr))
+        if zs is not None and zr is not None and zs < 9999 and zr < 9999:
+            gain_ratio = t_sci / t_ref * 10 ** (0.4 * (zs - zr))
             qa.metrics['gain_ratio_zp'] = gain_ratio
+            qa.metrics['gain_source'] = 'zeropoint'
+        elif f_stars:
+            gain_ratio = f_stars
+            qa.metrics['gain_source'] = 'field stars'
+            qa.warn('zero point missing (run zcat on science and reference): flux ratio from field stars')
+        else:
+            qa.metrics['gain_source'] = 'pyzogy fit'
+            qa.warn('no zero points and no field-star ratio: PyZOGY flux-ratio fit used (biased, bug O01)')
+    else:
+        qa.metrics['gain_source'] = 'pyzogy fit'
+    if np.isfinite(gain_ratio) and f_stars:
+        qa.check('gain_vs_field_stars', abs(gain_ratio / f_stars - 1), hi=0.03, severity='warn')
     patch_pyzogy()
     from ._pyzogy.subtract import run_subtraction
     scratch = os.getenv('SNPIPE_SCRATCH') or None  # fast local disk for the ~0.4 GB of per-frame scratch FITS
@@ -179,7 +246,10 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
         fits.PrimaryHDU(mask.astype('uint8'), hdr).writeto(tmp / '_targmask.fits')
         fits.PrimaryHDU(rmask.astype('uint8'), hdr).writeto(tmp / '_tempmask.fits')
         fits.PrimaryHDU(PSFModel.read(psf_f).image()).writeto(tmp / '_targpsf.fits')
-        fits.PrimaryHDU(PSFModel.read(tpsf_f).image()).writeto(tmp / '_temppsf.fits')
+        # both PSFs on the science pixel grid (the reference image has been registered onto it)
+        from .psf import pixscale
+        tpsf = rebin_psf(PSFModel.read(tpsf_f).image(), pixscale(thdr), pixscale(hdr))
+        fits.PrimaryHDU(tpsf).writeto(tmp / '_temppsf.fits')
         t1 = time.time()
         records = []
 
@@ -250,18 +320,24 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     db.insert('photlco', {k: v for k, v in rec.items() if v is not None}, conn)
     db.insert('photpairing', dict(namein=frame, tablein='photlco', nameout=out.name, tableout='photlco',
                                   nametemplate=trow['filename'], tabletemplate='photlco'), conn)
-    # agent-checkable residual statistics: robust std of the difference vs expected noise, at field stars
+    # noise check: the difference's robust noise vs the noise expected from its two inputs. In reference units
+    # (normalize t) the expected sky noise is sqrt(sig_sci^2 / F^2 + sig_ref^2), F = flux ratio sci/ref; a failed
+    # subtraction (wrong flux scale, misregistration) is much noisier than that.
+    mad = lambda a: 1.4826 * np.median(np.abs(a - np.median(a))) if a.size else np.nan
     d = fits.getdata(out).astype(float)
     good = ~(mask | rmask) & np.isfinite(d)
-    sig = 1.4826 * np.median(np.abs(d[good] - np.median(d[good])))
-    rg = rdata[~rmask & (foot > 0)]
-    sig_ref = 1.4826 * np.median(np.abs(rg - np.median(rg))) if rg.size else np.nan
+    sig = mad(d[good])
+    sig_ref = mad(rdata[~rmask & (foot > 0)])
+    sig_sci = mad(data[~mask & np.isfinite(data)])
+    F = gain_ratio if np.isfinite(gain_ratio) else (f_stars or np.nan)
+    expected = np.hypot(sig_sci / F, sig_ref) if normalize == 't' else np.hypot(sig_sci, sig_ref * F)
     qa.metrics['noise_ratio_diff_to_ref'] = float(sig / sig_ref) if sig_ref else None
-    # a failed flux-scale fit makes the difference far noisier than its inputs (seen: 20x)
-    if qa.metrics['noise_ratio_diff_to_ref'] is not None:
-        qa.check('noise_ratio_diff_to_ref', qa.metrics['noise_ratio_diff_to_ref'], hi=10., severity='fail')
-        if qa.status == 'ok' and qa.metrics['noise_ratio_diff_to_ref'] > 5:
-            qa.warn('difference noise > 5x the reference sky noise')
+    qa.metrics['noise_expected'] = float(expected) if np.isfinite(expected) else None
+    qa.metrics['noise_ratio_to_expected'] = float(sig / expected) if np.isfinite(expected) and expected else None
+    if qa.metrics['noise_ratio_to_expected'] is not None:
+        qa.check('noise_ratio_to_expected', qa.metrics['noise_ratio_to_expected'], hi=3., severity='fail')
+        if qa.status == 'ok' and qa.metrics['noise_ratio_to_expected'] > 1.5:
+            qa.warn('difference noise > 1.5x the noise expected from science and reference')
     qa.metrics.update(template=trow['filename'], register_seconds=round(t_reg, 1), zogy_seconds=round(t_zogy, 1),
                       diff_median=float(np.median(d[good])), diff_mad_sigma=float(sig),
                       masked_fraction=float(1 - good.mean()), unmask=unmask)

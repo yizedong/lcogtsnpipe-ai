@@ -1,6 +1,6 @@
 # Baseline choices: the old pipeline's defaults. Copy into targets/<name>/universes/ and change what you need.
 id: baseline
-description: Old-pipeline defaults (lcogtsnpipe as run for the 2024pxl paper; SDSS gri, APASS BV, PyZOGY).
+description: Old-pipeline defaults (SDSS gri, APASS BV, PyZOGY), except the difference flux ratio comes from the zero points (bug O01).
 decisions:
   sloan_source: sdss
   wcs_check: banzai
@@ -13,6 +13,6 @@ decisions:
   diff_normalize: t
   diff_register: adaptive
   diff_region: full
-  diff_gain: fit
+  diff_gain: zeropoint
   diff_bkg_order: order1
   diff_phot_type: ph

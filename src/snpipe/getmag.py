@@ -55,7 +55,7 @@ def qa_failed(row, mtype='mag'):
         files['psfmag'] = Path(str(img).replace('.fits', '.psfmag.qa.json'))
     if '.diff.' in row['filename']:
         stem = row['filename'].split('.optimal')[0]
-        tag = ''.join(t for t in ('.cut', '.zp') if t + '.' in row['filename'])
+        tag = ''.join(t for t in ('.cut', '.zp', '.fit') if t + '.' in row['filename'])
         files['diff'] = Path(row['filepath']) / f'{stem}.diff{tag}.qa.json'
     out = []
     for stage, f in files.items():
