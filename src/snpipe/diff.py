@@ -277,7 +277,7 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     qa.metrics.update(gain_ratio_stars=f_stars, gain_ratio_stars_n=n_stars)
     gain_ratio = np.inf
     survey_ref = (trow.get('telescope') or '').upper() in ('PS1', 'SDSS')
-    if gain == 'zeropoint' and survey_ref and f_stars:
+    if (gain == 'stars' or (gain == 'zeropoint' and survey_ref)) and f_stars:
         # survey reference: the same field stars in both images give the ratio directly; the zero points would
         # need colour terms between the survey's and the LCO passbands
         gain_ratio = f_stars
@@ -295,6 +295,15 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
         else:
             qa.metrics['gain_source'] = 'pyzogy fit'
             qa.warn('no zero points and no field-star ratio: PyZOGY flux-ratio fit used (biased, bug O01)')
+    elif gain == 'stars':                          # too few field stars: fall back to the zero points, then the fit
+        zs, zr = row.get('zn'), trow.get('zn')
+        if zs is not None and zr is not None and zs < 9999 and zr < 9999:
+            gain_ratio = t_sci / t_ref * 10 ** (0.4 * (zs - zr))
+            qa.metrics['gain_source'] = 'zeropoint'
+            qa.warn('too few matched field stars: flux ratio from the zero points')
+        else:
+            qa.metrics['gain_source'] = 'pyzogy fit'
+            qa.warn('no field-star ratio and no zero points: PyZOGY flux-ratio fit used (biased, bug O01)')
     else:
         qa.metrics['gain_source'] = 'pyzogy fit'
     if np.isfinite(gain_ratio) and f_stars and qa.metrics['gain_source'] != 'field stars':

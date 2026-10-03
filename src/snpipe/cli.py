@@ -168,9 +168,9 @@ def parser():
             a.add_argument('--unmask', action='store_true')
             a.add_argument('--register', default='adaptive', help='adaptive | exact | bilinear | bicubic')
             a.add_argument('--region', choices=['full', 'cutout'], default='full')
-            a.add_argument('--gain', choices=['zeropoint', 'fit'], default='zeropoint',
-                           help='flux ratio science/reference: from the zero points (default) or the PyZOGY fit '
-                                '(old default, biased low: bug O01)')
+            a.add_argument('--gain', choices=['zeropoint', 'stars', 'fit'], default='zeropoint',
+                           help='flux ratio science/reference: from the zero points (default), from the same field '
+                                'stars in both images, or the PyZOGY fit (old default, biased low: bug O01)')
             a.add_argument('--cutout-size', type=int, default=2048)
             a.add_argument('--reference-class', choices=['same', 'any'], default='same',
                            help="with --target-file: subtract only with a reference of the frame's own telescope "

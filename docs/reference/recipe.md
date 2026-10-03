@@ -129,6 +129,7 @@ The old pipeline subtracts the full frame. A 2048x2048 cutout around the target 
 The ratio from the two images' zero points matches the ratio measured on the field stars within 2% (SN 2025rbs). PyZOGY's iterative fit, the old default, is biased low: by 10-30% on 0.4-m frames when the reference PSF was not resampled (bug O01), and by 1-6% even on 1-m frames; with a bright host this leaves uncancelled host light (0.4-1.6 mag on 2025rbs). The field-star ratio is measured on every frame as a check (warn above 3%).
 
 - `zeropoint` **(default)**: From the photometric zero points (field stars if a zero point is missing)
+- `stars`: From the same field stars measured in both images (zero points if too few stars)
 - `fit`: PyZOGY iterative fit (old pipeline; biased)
 
 ### `diff_bkg_order`: Order of the background surface fitted around the transient on difference images

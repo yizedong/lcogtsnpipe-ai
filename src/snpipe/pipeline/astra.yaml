@@ -380,6 +380,7 @@ decisions:
       (0.4-1.6 mag on 2025rbs). The field-star ratio is measured on every frame as a check (warn above 3%).
     options:
       zeropoint: {label: From the photometric zero points (field stars if a zero point is missing)}
+      stars: {label: From the same field stars measured in both images (zero points if too few stars)}
       fit: {label: PyZOGY iterative fit (old pipeline; biased)}
   diff_bkg_order:
     label: Order of the background surface fitted around the transient on difference images
