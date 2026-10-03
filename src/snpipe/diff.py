@@ -236,9 +236,11 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
         qa.check('gain_vs_field_stars', abs(gain_ratio / f_stars - 1), hi=0.03, severity='warn')
     patch_pyzogy()
     from ._pyzogy.subtract import run_subtraction
-    scratch = os.getenv('SNPIPE_SCRATCH') or None  # fast local disk for the ~0.4 GB of per-frame scratch FITS
-    if scratch:
-        os.makedirs(scratch, exist_ok=True)  # local scratch can be cleaned by the system between frames
+    # ~0.4 GB of per-frame temporary FITS: in $SNPIPE_SCRATCH, else in <workdir>/tmp (never the system /tmp,
+    # which is a small node-local disk on clusters)
+    from . import config
+    scratch = os.getenv('SNPIPE_SCRATCH') or str(config.workdir() / 'tmp')
+    os.makedirs(scratch, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=scratch, ignore_cleanup_errors=True) as tmp:  # per-frame, parallel-safe
         tmp = Path(tmp)
         fits.PrimaryHDU(data, hdr).writeto(tmp / '_targ.fits')
