@@ -327,7 +327,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Where:** survey.py
 - **What was wrong:** SATURATE = 1.01 x the brightest pixel; the psf stage then picked saturated stars (aperture correction 0.83 mag off for r, rescued only by the ladder's 'datamax below the brightest star').
 - **Why it matters:** Bad PSFs of survey references.
-- **Fix:** SATURATE = 5th percentile of the pixels PS1 flags SAT or STARCORE.
+- **Fix:** SATURATE = median of the pixels PS1 flags STARCORE (bright-star cores; SAT pixels are already blank in the stacks). A first attempt (5th percentile of SAT|STARCORE pixels) gave ~1,200-2,200 counts, below the image's 99.9th percentile, and no PSF could be built.
 - **Effect on SN 2024pxl:** 2025rbs PS1 test.
 
 ### B30 — Frames in a filter the survey does not have were reported as failures

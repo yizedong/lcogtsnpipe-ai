@@ -146,9 +146,11 @@ def ps1_reference(ra, dec, size_arcsec, lco_filter, out, name='', timeout=600):
         wt, _ = cutout(cell['stack.wt'], ra, dec, size_px, timeout)
         bits = np.nan_to_num(msk, nan=0.).astype('int64')
         good = np.isfinite(img) & np.isfinite(wt) & (wt > 0) & ((bits & PS1_BAD_BITS) == 0)
-        flagged = img[((bits & (0x0020 | 0x1000)) != 0) & np.isfinite(img)]      # SAT, STARCORE
-        if flagged.size:
-            satlev.append(float(np.percentile(flagged, 5)))
+        # saturated (SAT) pixels are blank (NaN) in PS1 stacks; STARCORE marks the regions around bright stars
+        # (values from ~3e3 to >2e5 in a 2025rbs r stack): their median is where PS1 calls a core bright
+        cores = img[((bits & 0x1000) != 0) & np.isfinite(img)]
+        if cores.size:
+            satlev.append(float(np.median(cores)))
         if k == 0:
             hdr0, w0, shape = hdr, WCS(hdr), img.shape
         else:      # same tangent plane within a projection cell: (near) identity resampling onto the first grid
@@ -187,8 +189,8 @@ def ps1_reference(ra, dec, size_arcsec, lco_filter, out, name='', timeout=600):
     # GAIN x median sky RMS, so the background term equals the stack's own variance image
     h['GAIN'] = float(hdr0.get('CELL.GAIN', 1.)) * h['NINPUTS']
     h['RDNOISE'] = float(h['GAIN'] * np.sqrt(np.median(var[covered])))
-    # saturation: the level of the pixels PS1 flags as saturated or bright-star core (5th percentile; they are also
-    # masked); without such pixels, above every valid pixel
+    # saturation level for PSF-star selection and PyZOGY: the median of the bright-star-core (STARCORE) pixels
+    # (those pixels are masked anyway); without such pixels, above every valid pixel
     h['SATURATE'] = (min(satlev) if satlev else float(np.nanmax(data[covered])) * 1.01) if covered.any() else 1e9
     h['WCSERR'] = 0
     if fwhm:

@@ -438,7 +438,7 @@
       "where": "survey.py",
       "what": "SATURATE = 1.01 x the brightest pixel; the psf stage then picked saturated stars (aperture correction 0.83 mag off for r, rescued only by the ladder's 'datamax below the brightest star').",
       "why": "Bad PSFs of survey references.",
-      "fix": "SATURATE = 5th percentile of the pixels PS1 flags SAT or STARCORE.",
+      "fix": "SATURATE = median of the pixels PS1 flags STARCORE (bright-star cores; SAT pixels are already blank in the stacks). A first attempt (5th percentile of SAT|STARCORE pixels) gave ~1,200-2,200 counts, below the image's 99.9th percentile, and no PSF could be built.",
       "effect": "2025rbs PS1 test."
     },
     {
