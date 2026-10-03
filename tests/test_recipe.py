@@ -213,3 +213,12 @@ def test_survey_reference(tmp_path):
     assert survey.ps1_band('rp') == 'r'
     with pytest.raises(survey.SurveyError):
         survey.ps1_band('B')                     # PS1 has no B, V, U
+
+
+def test_exit_code_missing_only_when_nothing_could_run():
+    from snpipe import qa
+    s = lambda ok, skipped, missing: {'counts': {'ok': ok, 'warn': 0, 'fail': 0, 'skipped': skipped},
+                                      'skipped_missing_input': ['f'] * missing}
+    assert qa.exit_code(s(0, 749, 3)) == qa.EXIT['ok']               # 746 already done, 3 without psf
+    assert qa.exit_code(s(0, 5, 5)) == qa.EXIT['missing_input']      # nothing could run
+    assert qa.exit_code(s(2, 3, 3)) == qa.EXIT['ok']

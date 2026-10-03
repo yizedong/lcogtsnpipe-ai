@@ -124,10 +124,12 @@ def write_summary(stage, frames, params=None, started=None, out=None):
 
 
 def exit_code(summary):
-    """1 if any frame failed its gates; 3 if nothing was processed because inputs were missing; else 0."""
+    """1 if any frame failed its gates; 3 if no frame could be processed at all because its inputs were missing
+    (every skipped frame lacked an earlier stage's product); else 0 (frames already done count as done)."""
     c = summary['counts']
     if c['fail']:
         return EXIT['qa_fail']
-    if not (c['ok'] or c['warn']) and summary.get('skipped_missing_input'):
+    missing = summary.get('skipped_missing_input') or []
+    if not (c['ok'] or c['warn']) and missing and len(missing) == c['skipped']:
         return EXIT['missing_input']
     return EXIT['ok']
