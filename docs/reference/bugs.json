@@ -462,7 +462,7 @@
       "origin": "new",
       "stage": "mag",
       "date": "2026-10-03",
-      "commit": "",
+      "commit": "85618ba",
       "found_by": "SN 2025rbs gain comparison (frames where the subtraction looked brighter than the total)",
       "title": "The \"difference cannot be brighter than the total\" check compared with the PSF magnitude",
       "where": "mag.py",

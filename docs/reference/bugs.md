@@ -340,7 +340,7 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Effect on SN 2024pxl:** 99 frames of the 2025rbs PS1 test.
 
 ### B31 — The "difference cannot be brighter than the total" check compared with the PSF magnitude
-*mag · snpipe only · 2026-10-03 · found by: SN 2025rbs gain comparison (frames where the subtraction looked brighter than the total)*
+*mag · snpipe only · 2026-10-03 · fix [`85618ba`](https://github.com/yizedong/lcogtsnpipe-ai/commit/85618ba) · found by: SN 2025rbs gain comparison (frames where the subtraction looked brighter than the total)*
 
 - **Where:** mag.py
 - **What was wrong:** The bound used the unsubtracted PSF magnitude; on a bright host or a faded transient that fit fails (2025rbs at +400 d: PSF minus aperture +4 to +5.6 mag), so good subtractions failed the check.
