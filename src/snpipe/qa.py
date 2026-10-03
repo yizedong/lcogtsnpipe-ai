@@ -87,7 +87,7 @@ def write_frame(qa: FrameQA, image_path):
 
 # a 'skipped' frame is either already done (fine) or missing a prerequisite (an earlier stage did not run or
 # failed). Messages of the first kind contain one of these words; every other skip counts as missing input.
-DONE_WORDS = ('already', 'exists', 'no reference for this telescope class')
+DONE_WORDS = ('already', 'exists', 'no reference for this telescope class', 'no reference in this filter')
 
 
 def skipped_missing(frames):

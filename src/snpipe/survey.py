@@ -139,12 +139,16 @@ def ps1_reference(ra, dec, size_arcsec, lco_filter, out, name='', timeout=600):
     size_px = int(np.ceil(size_arcsec / PS1_SCALE))
     cells = skycells(footprint_points(ra, dec, size_arcsec / 7200.), band)
     sci = wsum = None
+    satlev = []
     for k, cell in enumerate(cells):
         img, hdr = cutout(cell['stack'], ra, dec, size_px, timeout)
         msk, _ = cutout(cell['stack.mask'], ra, dec, size_px, timeout)
         wt, _ = cutout(cell['stack.wt'], ra, dec, size_px, timeout)
         bits = np.nan_to_num(msk, nan=0.).astype('int64')
         good = np.isfinite(img) & np.isfinite(wt) & (wt > 0) & ((bits & PS1_BAD_BITS) == 0)
+        flagged = img[((bits & (0x0020 | 0x1000)) != 0) & np.isfinite(img)]      # SAT, STARCORE
+        if flagged.size:
+            satlev.append(float(np.percentile(flagged, 5)))
         if k == 0:
             hdr0, w0, shape = hdr, WCS(hdr), img.shape
         else:      # same tangent plane within a projection cell: (near) identity resampling onto the first grid
@@ -183,7 +187,9 @@ def ps1_reference(ra, dec, size_arcsec, lco_filter, out, name='', timeout=600):
     # GAIN x median sky RMS, so the background term equals the stack's own variance image
     h['GAIN'] = float(hdr0.get('CELL.GAIN', 1.)) * h['NINPUTS']
     h['RDNOISE'] = float(h['GAIN'] * np.sqrt(np.median(var[covered])))
-    h['SATURATE'] = float(np.nanmax(data)) * 1.01 if covered.any() else 1e9   # PS1 saturated pixels are masked
+    # saturation: the level of the pixels PS1 flags as saturated or bright-star core (5th percentile; they are also
+    # masked); without such pixels, above every valid pixel
+    h['SATURATE'] = (min(satlev) if satlev else float(np.nanmax(data[covered])) * 1.01) if covered.any() else 1e9
     h['WCSERR'] = 0
     if fwhm:
         h['L1FWHM'] = h['PSF_FWHM'] = (fwhm, 'FWHM (arcsec), measured with sep')

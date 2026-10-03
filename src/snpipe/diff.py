@@ -52,6 +52,11 @@ def fast_interpolate_bad_pixels(image, median_size=6, fname=''):
     den = gaussian_filter(valid.astype(float), median_size, mode='constant', cval=1., truncate=4.)
     with np.errstate(invalid='ignore', divide='ignore'):
         data[bad] = (num / den)[bad]
+    # a masked cluster wider than the kernel stays NaN, and one NaN turns the whole FFT-based difference into NaN
+    # (PyZOGY would fail the same way): fill what is left with the median of the valid pixels
+    left = ~np.isfinite(data)
+    if left.any():
+        data[left] = np.median(data[valid]) if valid.any() else 0.
     return data
 
 
@@ -112,8 +117,9 @@ def rebin_psf(img, scale_in, scale_out):
 
 
 def star_flux_ratio(sci_sn2, ref_sn2, t_sci, t_ref, radius=1.0, max_err=0.03):
-    """Flux ratio science/reference (counts) from the same field stars in both star tables (aperture magnitudes
-    per second): (t_sci/t_ref) 10^(-0.4 median(m_sci - m_ref)). Independent of PSFs and zero points."""
+    """Flux ratio science/reference (counts) from the same field stars in both star tables (3-FWHM aperture
+    magnitudes per second; the aperture scales with each image's seeing): (t_sci/t_ref) 10^(-0.4 median(m_sci -
+    m_ref)). Independent of the zero points."""
     from astropy.coordinates import SkyCoord
     import astropy.units as u
     tabs = []
@@ -134,10 +140,10 @@ def star_flux_ratio(sci_sn2, ref_sn2, t_sci, t_ref, radius=1.0, max_err=0.03):
     return float(t_sci / t_ref * 10 ** (-0.4 * np.median(dm))), int(ok.sum())
 
 
-def field_star_residual(diff_path, max_err=0.02, nmax=300):
+def field_star_residual(diff_path, max_err=0.02, nmax=300, fwhm_arcsec=None):
     """Field-star cancellation: the flux left at bright unsaturated stars of the difference image's star table
-    (aperture 3 x FWHM, local background from an annulus) divided by their flux in that table (magp3, same
-    aperture, the image the difference is normalised to). Median over stars = fractional flux-scale error of the
+    (aperture 4 x the broader of the two images' FWHM, local background from an annulus) divided by their flux
+    in that table (magp3, the image the difference is normalised to). Median over stars = fractional flux-scale error of the
     subtraction (0 = field stars cancel). Returns {residual, scatter, n} or None (fewer than 5 stars)."""
     from photutils.aperture import CircularAnnulus, CircularAperture, ApertureStats, aperture_photometry
     d, h = fits.getdata(diff_path).astype(float), fits.getheader(diff_path)
@@ -154,8 +160,9 @@ def field_star_residual(diff_path, max_err=0.02, nmax=300):
     w = WCS(h)
     x, y = w.world_to_pixel_values(ra, dec)
     from .psf import pixscale
-    fwhm_px = float(sh.get('PSF_FWHM') or 1.5) / pixscale(h)
-    r = 3 * fwhm_px
+    # the difference's PSF is about the broader of the two images': 4 x that FWHM encloses ~all of a star's flux
+    fwhm_px = max(float(sh.get('PSF_FWHM') or 1.5), fwhm_arcsec or 0.) / pixscale(h)
+    r = 4 * fwhm_px
     inside = (x > 2 * r) & (y > 2 * r) & (x < d.shape[1] - 2 * r) & (y < d.shape[0] - 2 * r)
     if inside.sum() < 5:
         return None
@@ -206,6 +213,15 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
             qa.messages.append(f'no reference for this telescope class ({cls}): not subtracted')
             return qa
         tempdate, temptel = ref['dayobs'], ref['camera']
+        if ref.get('survey'):
+            from .survey import SurveyError, survey_band
+            try:
+                survey_band(ref['survey'], row['filter'])
+            except SurveyError as e:
+                qa = FrameQA(frame, 'diff')
+                qa.status = 'skipped'
+                qa.messages.append(f'no reference in this filter: {e}')
+                return qa
     tag = ('.cut' if region == 'cutout' else '') + ('.fit' if gain == 'fit' else '')
     # a non-default variant keeps its own QA file (<frame>.diff.fit.qa.json), never the default's
     qa = FrameQA(frame, 'diff' + tag)
@@ -262,6 +278,12 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     t1 = time.time()
     rdata, rmask, foot = register(tdata, tmask, thdr, hdr, data.shape, register_method)
     t_reg = time.time() - t1
+    # flux-conserving registration multiplies pixel values by the pixel-area ratio (e.g. x2.4 for a 0.25"/px survey
+    # reference on 0.39"/px science): the reference saturation level must follow, or ordinary pixels are masked
+    from astropy.wcs.utils import proj_plane_pixel_area
+    area_ratio = float(proj_plane_pixel_area(WCS(hdr)) / proj_plane_pixel_area(WCS(thdr)))
+    sat_temp *= area_ratio
+    qa.metrics['pixel_area_ratio'] = area_ratio
     # flux ratio science/reference (decision diff_gain). zeropoint (default): F = (t_sci/t_ref) 10^(0.4 (zn_sci -
     # zn_ref)), zn = zcat's natural-system zero point; if a zero point is missing, the same ratio measured on the
     # field stars of both star tables; fit: PyZOGY's iterative fit (old default; biased low, bug O01).
@@ -423,7 +445,7 @@ def run_one(frame, tempdate='19990101-20080101', temptel='', normalize='t', unma
     qa.check('masked_fraction', qa.metrics['masked_fraction'], hi=0.5, severity='warn')
     # field stars must cancel: the fraction of their flux left is the flux-scale error of this subtraction
     try:
-        fs = field_star_residual(out)
+        fs = field_star_residual(out, fwhm_arcsec=row.get('fwhm') if row.get('fwhm') and row['fwhm'] < 9999 else None)
     except Exception as e:
         fs = None
         qa.messages.append(f'field-star cancellation not measured: {type(e).__name__}: {e}')

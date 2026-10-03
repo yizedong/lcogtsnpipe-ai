@@ -1,6 +1,6 @@
 # Bugs fixed, and why
 
-27 fixed (5 of them inherited from the old pipeline), 11 open, 2 checked and not bugs. Generated from [bugs.json](bugs.json) by `tools/docs/bugs_page.py`; other deliberate differences from the old pipeline are in [compatibility.md](compatibility.md).
+31 fixed (5 of them inherited from the old pipeline), 12 open, 2 checked and not bugs. Generated from [bugs.json](bugs.json) by `tools/docs/bugs_page.py`; other deliberate differences from the old pipeline are in [compatibility.md](compatibility.md).
 
 | id | status | origin | stage | bug |
 |---|---|---|---|---|
@@ -30,6 +30,10 @@
 | B24 | fixed | snpipe only | psfmag | Difference-image apertures from the reference's seeing only |
 | B25 | fixed | snpipe only | ingest | Ingesting reference frames crashed with per-class references |
 | B26 | fixed | snpipe only | qa | 'Missing input' when only some frames lacked inputs |
+| B27 | fixed | snpipe only | diff | Reference saturation not scaled by the registration's pixel-area ratio |
+| B28 | fixed | snpipe only | diff | One unfillable masked cluster turned the whole difference image into NaN |
+| B29 | fixed | snpipe only | survey | PS1 reference saturation level was the image maximum |
+| B30 | fixed | snpipe only | diff | Frames in a filter the survey does not have were reported as failures |
 | O01 | fixed | also in the old pipeline | diff | Template PSF is not transformed to the science pixel grid |
 | O02 | open | snpipe only | psf | PSF-fit errors on difference images ignore the subtracted sky and reference noise |
 | O03 | open | snpipe only | psf | Grouped PSF fits have one sky per star instead of one per group |
@@ -42,6 +46,7 @@
 | O10 | open | run scripts | run scripts | Job scripts report success when stages fail, and can delete products after a failed copy |
 | O11 | open | documentation | report | Report claims stronger than the evidence |
 | O12 | open | also in the old pipeline | zcat | Cloudy frames are not flagged: no check on the zero point itself |
+| O13 | open | snpipe only | diff (survey references) | With PS1 references the field stars are over-subtracted by 2-7% |
 | N01 | not-a-bug | also in the old pipeline | zcat | zcat 'module-global keep' |
 | N02 | not-a-bug | snpipe only | tools | compare.py could pair different stars by row index |
 
@@ -297,6 +302,42 @@ Mistakes made while porting, found by comparing with the old pipeline/IRAF, by t
 - **Fix:** Exit 3 only when every skipped frame lacked its inputs (7306d30).
 - **Effect on SN 2024pxl:** Stopped the 2025rbs finishing run once.
 
+### B27 — Reference saturation not scaled by the registration's pixel-area ratio
+*diff · snpipe only · 2026-10-03 · found by: SN 2025rbs PS1-reference test run*
+
+- **Where:** diff.py
+- **What was wrong:** Flux-conserving registration multiplies the reference's pixel values by the pixel-area ratio (x2.4 for a 0.25"/px PS1 reference on 0.39"/px science) but PyZOGY got the unscaled saturation level: 132,452 pixels of a PS1 i reference were masked as saturated.
+- **Why it matters:** Large masked clusters, then an all-NaN difference image (r and i of the 2025rbs PS1 test).
+- **Fix:** Saturation level x pixel-area ratio.
+- **Effect on SN 2024pxl:** Every PS1 r/i subtraction of the first 2025rbs test failed; none for LCO 1-m references (ratio ~1).
+
+### B28 — One unfillable masked cluster turned the whole difference image into NaN
+*diff · snpipe only · 2026-10-03 · found by: SN 2025rbs PS1-reference test run*
+
+- **Where:** diff.fast_interpolate_bad_pixels
+- **What was wrong:** PyZOGY's bad-pixel interpolation (49x49 Gaussian) leaves clusters wider than the kernel as NaN, and one NaN makes the FFT-based difference NaN everywhere (the original PyZOGY behaves the same).
+- **Why it matters:** A whole frame lost for a local masking problem.
+- **Fix:** Pixels still NaN after the interpolation get the median of the valid pixels (identical to PyZOGY elsewhere, test to 1e-14).
+- **Effect on SN 2024pxl:** As B27.
+
+### B29 — PS1 reference saturation level was the image maximum
+*survey · snpipe only · 2026-10-03 · found by: SN 2025rbs PS1-reference test run*
+
+- **Where:** survey.py
+- **What was wrong:** SATURATE = 1.01 x the brightest pixel; the psf stage then picked saturated stars (aperture correction 0.83 mag off for r, rescued only by the ladder's 'datamax below the brightest star').
+- **Why it matters:** Bad PSFs of survey references.
+- **Fix:** SATURATE = 5th percentile of the pixels PS1 flags SAT or STARCORE.
+- **Effect on SN 2024pxl:** 2025rbs PS1 test.
+
+### B30 — Frames in a filter the survey does not have were reported as failures
+*diff · snpipe only · 2026-10-03 · found by: SN 2025rbs PS1-reference test run*
+
+- **Where:** diff.py, qa.py
+- **What was wrong:** B, V, U frames of a class with a PS1 reference ended as 'template not found' (fail).
+- **Why it matters:** Misleading QA for agents.
+- **Fix:** Skipped with 'no reference in this filter' (counts as done, not as missing input).
+- **Effect on SN 2024pxl:** 99 frames of the 2025rbs PS1 test.
+
 
 ## Open: verified, not fixed yet
 
@@ -400,6 +441,15 @@ Checked to be real; effect on SN 2024pxl given.
 - **Why it matters:** Thick-cloud frames give poor photometry and failed subtractions; the cause should be named at the zero-point step, not discovered downstream.
 - **Proposed fix:** Compare each zero point with the robust median of the same telescope class and filter (ensemble check, as review --ensemble does for the PSF); warn beyond ~0.5 mag, fail beyond ~1.5 mag (thresholds to be set from the 2024pxl season).
 - **Effect on SN 2024pxl:** Not yet measured on the season; on this night 6 frames, all with failed or warned subtractions.
+
+### O13 — With PS1 references the field stars are over-subtracted by 2-7%
+*diff (survey references) · snpipe only · found by: SN 2025rbs PS1-reference test run*
+
+- **Where:** diff.py star_flux_ratio / survey references
+- **What was wrong:** On 1-m LCO frames subtracted with a PS1 stack (flux ratio from the field stars, noise as expected), the field stars leave -2% to -7% of their flux (aperture 4 x the broader FWHM); with LCO 1-m references the same check gives ~0 to +3%.
+- **Why it matters:** The transient and the host are then scaled a few % wrong; survey references are not validated until this is understood.
+- **Proposed fix:** To find: passband mismatch PS1 vs LCO (colour-dependent ratio; fit the ratio vs colour), PSF mismatch between the 1.2" stack and 2" LCO frames, or the ratio estimate (aperture magnitudes). Measure on the full 2025rbs 1-m set.
+- **Effect on SN 2024pxl:** Not yet measured on light curves.
 
 
 ## Checked and not bugs
